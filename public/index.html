@@ -47,15 +47,27 @@
 
   <div class="card" id="loginCard">
     <div class="row" style="justify-content:space-between"><strong>Vilnius Login</strong><span id="sess" class="muted"></span></div>
-    <form id="loginForm" style="display:none;margin-top:8px" autocomplete="on">
-      <div class="two">
-        <div><label class="f">El. paštas</label><input type="text" id="lu" autocomplete="username" inputmode="email"></div>
-        <div><label class="f">Slaptažodis</label><input type="password" id="lp" autocomplete="current-password" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit"></div>
-      </div>
-      <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="lr"> Prisiminti sesiją šiame serveryje</label>
-      <div class="muted">Slaptažodis panaudojamas tik prisijungimui ir niekur neišsaugomas. Pažymėjus varnelę, serveryje išsaugomas tik sesijos raktas (iki jo galiojimo pabaigos); nepažymėjus – sesija laikoma tik atmintyje iki programos perkrovimo.</div>
-      <div class="row" style="margin-top:10px"><button class="primary" type="submit">Prisijungti</button><span id="loginMsg" class="muted"></span></div>
-    </form>
+    <div id="loginBox" style="display:none;margin-top:8px">
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="lr"> <strong>Likti prisijungus</strong></label>
+      <div class="muted">Pažymėta – sesijos raktas išsaugomas serveryje ir galioja iki jo pabaigos (ir po perkrovimo). Nepažymėta – sesija laikoma tik atmintyje; jai pasibaigus naudojami programoje išsaugoti prisijungimo duomenys (jei nustatyti), kitaip prisijungti reikės iš naujo. Slaptažodis niekada neišsaugomas.</div>
+
+      <div style="margin-top:12px"><strong>1 būdas – per naršyklę (rekomenduojamas)</strong></div>
+      <ol class="muted" style="margin:4px 0 0 18px;padding:0">
+        <li>Nutempkite šią nuorodą į žymių juostą (vieną kartą): <a id="bm" class="pill on" style="text-decoration:none">→ Parking</a></li>
+        <li>Prisijunkite <a href="https://tvarkaumiesta.lt" target="_blank" rel="noopener">tvarkaumiesta.lt</a> įprastai (Vilnius Login ar e. valdžios vartai).</li>
+        <li>Ten paspauskite žymę „→ Parking“ – sesija bus perduota čia.</li>
+      </ol>
+
+      <form id="loginForm" style="margin-top:14px" autocomplete="on">
+        <div><strong>2 būdas – Vilnius Login el. paštas ir slaptažodis</strong></div>
+        <div class="two">
+          <div><label class="f">El. paštas</label><input type="text" id="lu" autocomplete="username" inputmode="email"></div>
+          <div><label class="f">Slaptažodis</label><input type="password" id="lp" autocomplete="current-password" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit"></div>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="primary" type="submit">Prisijungti</button></div>
+      </form>
+      <div id="loginMsg" class="muted" style="margin-top:6px"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -91,7 +103,7 @@ async function init() {
     $('#modeNote').innerHTML = '<span class="pill">Rankinis režimas</span> Claude API raktas nenustatytas – numerį ir pažeidimą pasirinksite patys, EXIF data, laikas ir adresas užpildomi automatiškai.';
   }
   $('#useAi').onchange = () => { $('#modeNote').textContent = $('#useAi').checked ? '' : 'Rankinis režimas: Claude nebus naudojamas.'; };
-  refreshSession();
+  if (location.hash.startsWith('#import=')) await importFromHash(); else refreshSession();
   loadJournal();
 }
 
@@ -100,15 +112,35 @@ async function refreshSession() {
   if (s.loggedIn) {
     $('#sess').innerHTML = `Prisijungta: <strong>${esc(s.name || '—')}</strong>${s.remembered ? ' (sesija išsaugota)' : ' (tik atmintyje)'} <button id="logout">Atsijungti</button>`;
     $('#logout').onclick = async () => { await fetch('api/logout', { method: 'POST' }); refreshSession(); };
-    $('#loginForm').style.display = 'none';
-  } else if (CFG.secrets.vilnius) {
-    $('#sess').textContent = 'Bus prisijungta išsaugotais duomenimis pateikiant';
-    $('#loginForm').style.display = 'none';
+    $('#loginBox').style.display = 'none';
   } else {
-    $('#sess').textContent = 'Neprisijungta';
-    $('#loginForm').style.display = 'block';
+    $('#sess').textContent = CFG.secrets.vilnius ? 'Neprisijungta – pateikiant bus naudojami išsaugoti duomenys' : 'Neprisijungta';
+    $('#loginBox').style.display = 'block';
   }
   return s.loggedIn;
+}
+
+// "Likti prisijungus" is a per-browser preference.
+const REMEMBER_KEY = 'tvarkau-remember';
+try { $('#lr').checked = localStorage.getItem(REMEMBER_KEY) === '1'; } catch {}
+$('#lr').onchange = () => { try { localStorage.setItem(REMEMBER_KEY, $('#lr').checked ? '1' : '0'); } catch {} };
+
+// Bookmarklet: run on tvarkaumiesta.lt, it opens this app with the site's session in the
+// URL fragment (never sent to any server) – no password involved.
+$('#bm').href = `javascript:(()=>{const u=localStorage.getItem('user');if(!u){alert('Pirmiausia prisijunkite tvarkaumiesta.lt');return}window.open(${JSON.stringify(location.origin + '/#import=')}+encodeURIComponent(u),'_blank')})()`;
+$('#bm').onclick = ev => { ev.preventDefault(); alert('Nutempkite šią nuorodą į naršyklės žymių juostą, tada naudokite ją tvarkaumiesta.lt puslapyje.'); };
+
+async function importFromHash() {
+  const m = location.hash.match(/^#import=(.+)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname); // drop the token from the address bar
+  let user;
+  try { user = JSON.parse(decodeURIComponent(m[1])); } catch { $('#loginMsg').innerHTML = '<span style="color:var(--bad)">Netinkami sesijos duomenys</span>'; return; }
+  const r = await fetch('api/session/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user, remember: $('#lr').checked }) });
+  const j = await r.json();
+  $('#loginMsg').innerHTML = j.ok ? '' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
+  refreshSession();
 }
 
 $('#loginForm').onsubmit = async ev => {

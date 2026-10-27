@@ -10,7 +10,7 @@ import { log } from './log.mjs';
 import { secretStatus } from './secrets.mjs';
 import { archiveCase, ensureDirs, journalAdd, journalRows } from './store.mjs';
 import { buildDescription, VIOLATIONS } from './violations.mjs';
-import { applicantFrom, getUser, loginWith, logout, sessionInfo, submitReport } from './vilnius.mjs';
+import { applicantFrom, getUser, importSession, loginWith, logout, sessionInfo, submitReport } from './vilnius.mjs';
 
 // Municipal rule: reports about violations older than 30 days are not handled by VMSA.
 const MAX_AGE_DAYS = 30;
@@ -86,6 +86,17 @@ app.post('/api/login', async (req, res) => {
   } catch (e) {
     log.warn('login', 'login failed', { reason: e.message });
     res.status(401).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/session/import', async (req, res) => {
+  const { user, remember } = req.body || {};
+  try {
+    const u = await importSession(user, !!remember);
+    res.json({ ok: true, name: u.name || null });
+  } catch (e) {
+    log.warn('login', 'session import failed', { reason: e.message });
+    res.status(400).json({ ok: false, error: e.message });
   }
 });
 

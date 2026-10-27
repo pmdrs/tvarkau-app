@@ -75,6 +75,18 @@ function pageError(html) {
   return m ? m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
 }
 
+// Structure of an unexpected page for the log: no field values, only names and labels.
+function pageShape(html) {
+  const text = s => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return {
+    title: text((html.match(/<title>([\s\S]*?)<\/title>/i) || [, ''])[1]),
+    headings: [...html.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi)].map(m => text(m[1])).filter(Boolean).slice(0, 5).join(' | '),
+    forms: [...html.matchAll(/<form[^>]*>/gi)].map(m => `${(m[0].match(/method="([^"]+)"/i) || [, 'GET'])[1]} ${shortUrl((m[0].match(/action="([^"]+)"/i) || [, ''])[1])}`).join(' | '),
+    inputs: [...new Set([...html.matchAll(/<input[^>]*name="([^"]+)"/gi)].map(m => m[1]))].join(','),
+    buttons: [...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/gi)].map(m => text(m[1])).filter(Boolean).slice(0, 6).join(' | '),
+  };
+}
+
 export class NeedsLogin extends Error {
   constructor() { super('Reikia prisijungti per Vilnius Login'); this.code = 'NEEDS_LOGIN'; }
 }
@@ -114,6 +126,8 @@ async function login(username, password, { remember = true } = {}) {
     const page = done.res.status >= 300 && done.res.status < 400 ? await (await go(jar, done.url)).text() : await done.res.text().catch(() => '');
     const msg = pageError(page);
     log.warn('login', 'Vilnius Login did not return to tvarkaumiesta', { at, status: done.res.status, message: msg || '-' });
+    log.warn('login', 'page shape', pageShape(page));
+    log.warn('login', 'cookies held', { names: jar.cookies.map(c => `${c.name}@${c.domain}`).join(',') });
     if (/login\.vilnius\.lt\/login$/.test(at)) {
       throw new Error(`Vilnius Login atmetė prisijungimą${msg ? `: „${msg}“` : ' – patikrinkite vartotojo vardą (ne el. paštą, jei jie skiriasi) ir slaptažodį'}.`);
     }
@@ -138,6 +152,18 @@ async function login(username, password, { remember = true } = {}) {
   log.info('login', 'logged in', { userId: user.id, remember });
   memorySession = user;
   if (remember) writeFileSync(sessionFile(), JSON.stringify(user), { mode: 0o600 });
+  return user;
+}
+
+// Session handed over from the user's own browser (tvarkaumiesta.lt localStorage "user"),
+// so the login itself — consent pages, e-valdžios vartai — happens in their browser.
+export async function importSession(user, remember) {
+  if (!user?.id || !user?.user_token) throw new Error('Netinkami sesijos duomenys');
+  if (!(await tokenValid(user))) throw new Error('tvarkaumiesta.lt sesija nebegalioja – prisijunkite svetainėje iš naujo');
+  logout();
+  memorySession = user;
+  if (remember) writeFileSync(sessionFile(), JSON.stringify(user), { mode: 0o600 });
+  log.info('login', 'session imported from browser', { userId: user.id, remember });
   return user;
 }
 
