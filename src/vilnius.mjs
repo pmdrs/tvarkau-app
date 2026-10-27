@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { log, maskUser, shortUrl } from './log.mjs';
 import { secrets } from './secrets.mjs';
 
 const API = 'https://api-tvarkau.vilnius.lt/api/v2/';
@@ -38,19 +39,22 @@ class Jar {
 }
 
 async function go(jar, url, init = {}) {
-  const headers = { 'User-Agent': UA, ...(init.headers || {}) };
+  const headers = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', 'Accept-Language': 'lt,en;q=0.8', ...(init.headers || {}) };
   const cookie = jar.header(url);
   if (cookie) headers.Cookie = cookie;
   const res = await fetch(url, { ...init, headers, redirect: 'manual' });
   jar.store(url, res);
+  const loc = res.headers.get('location');
+  log.info('login', `${init.method || 'GET'} ${shortUrl(url)} → ${res.status}${loc ? ' → ' + shortUrl(new URL(loc, url).toString()) : ''}`);
   return res;
 }
 
-// Follows HTTP redirects and the site's JS/meta redirects until `stop(url)` is true.
+// Follows HTTP redirects and the site's JS/meta redirects until a *new* URL satisfies
+// `stop(url)`. The starting URL is never tested: after POST /login the start URL is the
+// login page itself, and testing it made every login look like a rejection.
 async function follow(jar, url, init, stop, hops = 15) {
   let res = await go(jar, url, init);
   for (let i = 0; i < hops; i++) {
-    if (stop(url)) return { url, res };
     let next = null;
     if (res.status >= 300 && res.status < 400) next = res.headers.get('location');
     else if (res.status === 200 && (res.headers.get('content-type') || '').includes('html')) {
@@ -63,6 +67,12 @@ async function follow(jar, url, init, stop, hops = 15) {
     res = await go(jar, url);
   }
   throw new Error('Per daug nukreipimų prisijungiant');
+}
+
+// First visible error/alert text on a Vilnius Login page (Laravel validation, flash messages).
+function pageError(html) {
+  const m = html.match(/class="[^"]*\b(invalid-feedback|alert(?:-danger|-warning)?|text-danger|help-block|error)\b[^"]*"[^>]*>([\s\S]{0,400}?)<\/(?:div|span|p|strong|li)>/i);
+  return m ? m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
 }
 
 export class NeedsLogin extends Error {
@@ -92,22 +102,40 @@ async function login(username, password, { remember = true } = {}) {
   const csrf = (await formRes.text()).match(/name="_token"\s+value="([^"]+)"/)?.[1];
   if (!csrf) throw new Error('Nerasta Vilnius Login forma');
 
+  log.info('login', 'submitting Vilnius Login form', { user: maskUser(username) });
   const done = await follow(jar, 'https://login.vilnius.lt/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://login.vilnius.lt/login' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://login.vilnius.lt/login', Origin: 'https://login.vilnius.lt' },
     body: new URLSearchParams({ _token: csrf, username, password }),
-  }, u => u.startsWith(`${SITE}/authorized`) || /login\.vilnius\.lt\/login\b/.test(u));
+  }, u => u.startsWith(`${SITE}/authorized`) || /login\.vilnius\.lt\/login(\?|$)/.test(u));
 
-  if (!done.url.startsWith(`${SITE}/authorized`)) throw new Error('Vilnius Login atmetė prisijungimą (neteisingas vartotojas ar slaptažodis?)');
+  if (!done.url.startsWith(`${SITE}/authorized`)) {
+    const at = shortUrl(done.url);
+    const page = done.res.status >= 300 && done.res.status < 400 ? await (await go(jar, done.url)).text() : await done.res.text().catch(() => '');
+    const msg = pageError(page);
+    log.warn('login', 'Vilnius Login did not return to tvarkaumiesta', { at, status: done.res.status, message: msg || '-' });
+    if (/login\.vilnius\.lt\/login$/.test(at)) {
+      throw new Error(`Vilnius Login atmetė prisijungimą${msg ? `: „${msg}“` : ' – patikrinkite vartotojo vardą (ne el. paštą, jei jie skiriasi) ir slaptažodį'}.`);
+    }
+    if (/\/oauth\/authorize$/.test(at)) {
+      throw new Error('Vilnius Login prašo patvirtinti tvarkaumiesta.lt prieigą. Vieną kartą prisijunkite naršyklėje: tvarkaumiesta.lt → Prisijungti → Vilnius Login → patvirtinkite, tada bandykite čia dar kartą.');
+    }
+    throw new Error(`Prisijungimas sustojo ties ${at} (HTTP ${done.res.status})${msg ? `: „${msg}“` : ''}.`);
+  }
   const accessCode = new URLSearchParams(done.url.split('#')[1] || '').get('accessCode');
   if (!accessCode) throw new Error('Negautas accessCode po prisijungimo');
+  log.info('login', 'got accessCode, exchanging for user token');
 
   const fd = new FormData();
   fd.append('accessCode', accessCode);
   fd.append('loginVerifier', verifier);
   const r = await fetch(`${SITE}/api/login/user`, { method: 'POST', body: fd, headers: { 'User-Agent': UA } });
   const user = (await r.json().catch(() => null))?.data;
-  if (!r.ok || !user?.user_token) throw new Error(`Token gauti nepavyko (HTTP ${r.status})`);
+  if (!r.ok || !user?.user_token) {
+    log.error('login', 'token exchange failed', { status: r.status });
+    throw new Error(`Token gauti nepavyko (HTTP ${r.status})`);
+  }
+  log.info('login', 'logged in', { userId: user.id, remember });
   memorySession = user;
   if (remember) writeFileSync(sessionFile(), JSON.stringify(user), { mode: 0o600 });
   return user;

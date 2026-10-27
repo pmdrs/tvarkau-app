@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { analyzeIncident } from './ai.mjs';
 import { reverseGeocode } from './geo.mjs';
 import { groupIncidents, processPhoto, summarize } from './photos.mjs';
+import { log } from './log.mjs';
 import { secretStatus } from './secrets.mjs';
 import { archiveCase, ensureDirs, journalAdd, journalRows } from './store.mjs';
 import { buildDescription, VIOLATIONS } from './violations.mjs';
@@ -57,10 +58,11 @@ app.post('/api/analyze', upload.array('photos', 30), async (req, res) => {
       });
     }
     batches.set(batchId, { created: Date.now(), photos, cases });
+    log.info('analyze', `${photos.length} photos → ${cases.length} cases`, { ai: cases.some(c => !c.manual), noExif: cases.filter(c => c.noExif).length, aiErrors: cases.filter(c => c.aiError).length });
     for (const [id, b] of batches) if (Date.now() - b.created > 864e5) batches.delete(id);
     res.json({ batchId, cases, maxAgeDays: MAX_AGE_DAYS });
   } catch (e) {
-    console.error('analyze:', e.message);
+    log.error('analyze', e.message, { stack: e.stack?.split('\n')[1]?.trim() });
     res.status(500).json({ error: `Nuotraukų apdorojimas nepavyko: ${e.message}` });
   }
 });
@@ -82,6 +84,7 @@ app.post('/api/login', async (req, res) => {
     const user = await loginWith(String(username || '').trim(), String(password || ''), !!remember);
     res.json({ ok: true, name: user.name || null, applicant: applicantFrom(user) });
   } catch (e) {
+    log.warn('login', 'login failed', { reason: e.message });
     res.status(401).json({ ok: false, error: e.message });
   }
 });
@@ -114,6 +117,7 @@ app.post('/api/submit', async (req, res) => {
   if (!photos.length) return res.status(400).json({ error: 'Nepasirinkta nė viena nuotrauka' });
   try {
     const result = await submitReport({ time, address: address.trim(), lat, lon, plate: p, description: description.trim(), jpegs: photos.map(x => x.jpeg) });
+    log.info('submit', 'registered', { id: result.id, plate: p, kets: violations.join('+') });
     const kets = [...new Set(violations.map(v => VIOLATIONS[v]?.ket).filter(Boolean))];
     const folder = archiveCase({ time, plate: p, photos, report: { time, address, lat, lon, plate: p, description, kets, ...result, submittedAt: new Date().toISOString() } });
     journalAdd({ time, address, plate: p, kets, id: result.id, folder });
@@ -122,7 +126,7 @@ app.post('/api/submit', async (req, res) => {
     res.json({ ...result, url: result.id ? `https://tvarkaumiesta.lt/pranesimai/${result.id}` : null, folder });
   } catch (e) {
     if (e.code === 'NEEDS_LOGIN') return res.status(401).json({ needsLogin: true, error: 'Prisijunkite per Vilnius Login ir pateikite dar kartą.' });
-    console.error('submit:', e.message);
+    log.error('submit', e.message);
     res.status(502).json({ error: e.message });
   }
 });
@@ -130,4 +134,4 @@ app.post('/api/submit', async (req, res) => {
 app.get('/api/journal', (_req, res) => res.json(journalRows()));
 
 const port = +(process.env.PORT || 3000);
-app.listen(port, () => console.log(`tvarkau-app on :${port}`, secretStatus()));
+app.listen(port, () => log.info('server', `listening on :${port}`, secretStatus()));
