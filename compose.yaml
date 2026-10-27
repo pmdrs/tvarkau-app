@@ -1,0 +1,27 @@
+services:
+  tvarkau:
+    image: mobertas/tvarkau:latest
+    build: .
+    container_name: tvarkau
+    restart: unless-stopped
+    ports:
+      - "5580:3000"
+    volumes:
+      - ./data:/data
+    secrets:
+      - vilnius_username
+      - vilnius_password
+      - anthropic_api_key
+      - applicant.json
+
+# Secret files live next to this compose file in ./secrets (chmod 600, never committed,
+# never copied into the image). Create them with scripts/set-secrets.sh.
+secrets:
+  vilnius_username:
+    file: ./secrets/vilnius_username
+  vilnius_password:
+    file: ./secrets/vilnius_password
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+  applicant.json:
+    file: ./secrets/applicant.json

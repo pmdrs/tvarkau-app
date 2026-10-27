@@ -1,0 +1,8 @@
+secrets
+data
+node_modules
+.git
+*.env
+.env*
+compose.override.yaml
+deploy

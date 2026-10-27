@@ -1,0 +1,30 @@
+# Portainer → Stacks → Add stack → Web editor. Build the image on the host first:
+#   cd $APP_DIR && docker build -t mobertas/tvarkau:latest .
+# Set the stack environment variables (Portainer "Environment variables"):
+#   APP_DIR   – absolute path of this repo on the host, e.g. /home/<user>/tvarkau-app
+#   BIND_IP   – host IP to listen on (LAN or Tailscale address); add a second port line for another IP
+# Secret files may stay empty: no Claude key = manual mode, no Vilnius Login = log in in the app.
+services:
+  tvarkau:
+    image: mobertas/tvarkau:latest
+    container_name: tvarkau
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP}:5580:3000"
+    volumes:
+      - ${APP_DIR}/data:/data
+    secrets:
+      - vilnius_username
+      - vilnius_password
+      - anthropic_api_key
+      - applicant.json
+
+secrets:
+  vilnius_username:
+    file: ${APP_DIR}/secrets/vilnius_username
+  vilnius_password:
+    file: ${APP_DIR}/secrets/vilnius_password
+  anthropic_api_key:
+    file: ${APP_DIR}/secrets/anthropic_api_key
+  applicant.json:
+    file: ${APP_DIR}/secrets/applicant.json

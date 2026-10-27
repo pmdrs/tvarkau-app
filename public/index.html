@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tvarkau pranešimai</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e3e6ea; --accent:#2563eb; --ok:#15803d; --warn-bg:#fff7e6; --warn:#92400e; --bad-bg:#fdecec; --bad:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161a; --card:#1d2026; --text:#e8eaed; --muted:#9aa0a6; --line:#2e323a; --accent:#60a5fa; --ok:#4ade80; --warn-bg:#3a2c12; --warn:#fbbf24; --bad-bg:#3b1717; --bad:#f87171; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .muted { color:var(--muted); font-size:13px; }
+  label.f { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=date], input[type=time], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height: 120px; resize: vertical; }
+  .plate { font-weight:700; text-transform:uppercase; letter-spacing:1px; max-width: 200px; }
+  button { padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .thumbs { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
+  .thumbs label { position:relative; }
+  .thumbs img { width:110px; height:110px; object-fit:cover; border-radius:8px; border:2px solid var(--line); display:block; }
+  .thumbs input { position:absolute; top:6px; left:6px; transform:scale(1.3); }
+  .thumbs input:not(:checked) + img { opacity:.35; }
+  .note { border-radius:8px; padding:10px 12px; margin:8px 0; font-size:14px; }
+  .note.warn { background:var(--warn-bg); color:var(--warn); }
+  .note.bad { background:var(--bad-bg); color:var(--bad); }
+  .note.ok { background:transparent; border:1px solid var(--ok); color:var(--ok); }
+  .viol { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:4px 12px; }
+  .viol label { display:flex; gap:6px; align-items:center; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); }
+  .pill.on { border-color:var(--ok); color:var(--ok); } .pill.off { border-color:var(--bad); color:var(--bad); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tvarkau miestą – stovėjimo pažeidimai</h1>
+
+  <div class="card" id="loginCard">
+    <div class="row" style="justify-content:space-between"><strong>Vilnius Login</strong><span id="sess" class="muted"></span></div>
+    <form id="loginForm" style="display:none;margin-top:8px" autocomplete="on">
+      <div class="two">
+        <div><label class="f">Vartotojas (el. paštas)</label><input type="text" id="lu" autocomplete="username"></div>
+        <div><label class="f">Slaptažodis</label><input type="password" id="lp" autocomplete="current-password" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="lr"> Prisiminti sesiją šiame serveryje</label>
+      <div class="muted">Slaptažodis panaudojamas tik prisijungimui ir niekur neišsaugomas. Pažymėjus varnelę, serveryje išsaugomas tik sesijos raktas (iki jo galiojimo pabaigos); nepažymėjus – sesija laikoma tik atmintyje iki programos perkrovimo.</div>
+      <div class="row" style="margin-top:10px"><button class="primary" type="submit">Prisijungti</button><span id="loginMsg" class="muted"></span></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="files" type="file" multiple accept="image/*,.heic,.heif">
+      <label id="aiWrap" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="useAi" checked> Atpažinti su Claude</label>
+      <button class="primary" id="analyze">Analizuoti</button>
+    </div>
+    <div id="modeNote" class="muted" style="margin-top:6px"></div>
+    <div class="muted" style="margin-top:6px">Nuotraukos sugrupuojamos į atvejus pagal laiką ir vietą (EXIF). Iš telefono naršyklės EXIF vieta kartais būna išvalyta – tada adresą įveskite ranka.</div>
+    <div id="progress" class="muted"></div>
+  </div>
+
+  <div id="cases"></div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><strong>Pateikti pranešimai</strong><button id="reloadJournal">Atnaujinti</button></div>
+    <div id="journal" class="muted">…</div>
+  </div>
+</main>
+
+<script>
+let CFG = { maxAgeDays: 30, violations: {} };
+let BATCH = null;
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ageDays = t => t ? Math.floor((Date.now() - new Date(t.replace(' ', 'T'))) / 864e5) : null;
+
+async function init() {
+  CFG = await (await fetch('api/config')).json();
+  if (!CFG.secrets.anthropic) {
+    $('#aiWrap').style.display = 'none';
+    $('#modeNote').innerHTML = '<span class="pill">Rankinis režimas</span> Claude API raktas nenustatytas – numerį ir pažeidimą pasirinksite patys, EXIF data, laikas ir adresas užpildomi automatiškai.';
+  }
+  $('#useAi').onchange = () => { $('#modeNote').textContent = $('#useAi').checked ? '' : 'Rankinis režimas: Claude nebus naudojamas.'; };
+  refreshSession();
+  loadJournal();
+}
+
+async function refreshSession() {
+  const s = await (await fetch('api/session')).json();
+  if (s.loggedIn) {
+    $('#sess').innerHTML = `Prisijungta: <strong>${esc(s.name || '—')}</strong>${s.remembered ? ' (sesija išsaugota)' : ' (tik atmintyje)'} <button id="logout">Atsijungti</button>`;
+    $('#logout').onclick = async () => { await fetch('api/logout', { method: 'POST' }); refreshSession(); };
+    $('#loginForm').style.display = 'none';
+  } else if (CFG.secrets.vilnius) {
+    $('#sess').textContent = 'Bus prisijungta išsaugotais duomenimis pateikiant';
+    $('#loginForm').style.display = 'none';
+  } else {
+    $('#sess').textContent = 'Neprisijungta';
+    $('#loginForm').style.display = 'block';
+  }
+  return s.loggedIn;
+}
+
+$('#loginForm').onsubmit = async ev => {
+  ev.preventDefault();
+  $('#loginMsg').textContent = 'Jungiamasi…';
+  const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: $('#lu').value, password: $('#lp').value, remember: $('#lr').checked }) });
+  const j = await r.json();
+  $('#lp').value = '';
+  $('#loginMsg').innerHTML = j.ok ? '' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
+  if (j.ok) refreshSession();
+};
+
+$('#analyze').onclick = async () => {
+  const files = $('#files').files;
+  if (!files.length) return;
+  const fd = new FormData();
+  fd.append('ai', CFG.secrets.anthropic && $('#useAi').checked ? '1' : '0');
+  for (const f of files) fd.append('photos', f, f.name);
+  $('#analyze').disabled = true;
+  $('#progress').textContent = `Apdorojama ${files.length} nuotr.: EXIF, adresas, Claude analizė… (gali užtrukti minutę)`;
+  $('#cases').innerHTML = '';
+  try {
+    const r = await fetch('api/analyze', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    BATCH = j.batchId;
+    $('#progress').textContent = `Rasta atvejų: ${j.cases.length}`;
+    j.cases.forEach(renderCase);
+  } catch (e) {
+    $('#progress').innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`;
+  } finally {
+    $('#analyze').disabled = false;
+  }
+};
+
+function renderCase(c) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.lat = c.lat ?? ''; el.dataset.lon = c.lon ?? '';
+  const [d, t] = (c.time || '').split(' ');
+  el.innerHTML = `
+    <div class="row" style="justify-content:space-between"><strong>Atvejis ${c.id + 1}${c.vehicle ? ' – ' + esc(c.vehicle) : ''}</strong>
+      <span class="muted">${c.lat != null ? `<a href="https://www.openstreetmap.org/?mlat=${c.lat}&mlon=${c.lon}#map=19/${c.lat}/${c.lon}" target="_blank" rel="noopener">žemėlapis</a>` : 'be GPS'}</span></div>
+    <div class="thumbs">${c.photoIdx.map(i => `<label><input type="checkbox" class="ph" value="${i}" checked><img src="api/photo/${BATCH}/${i}" alt=""></label>`).join('')}</div>
+    ${c.aiError ? `<div class="note bad">${esc(c.aiError)}</div>` : ''}
+    ${c.manual ? `<div class="note warn">Rankinis režimas: įveskite numerį ir pažymėkite pažeidimus, tada „Perrašyti pagal laukus“.</div>` : ''}
+    ${c.noExif ? `<div class="note warn">Nuotraukose nėra EXIF laiko ir vietos – įveskite ranka.</div>` : ''}
+    ${c.doubts ? `<div class="note warn">Claude abejonės: ${esc(c.doubts)}</div>` : ''}
+    ${!c.plateCertain && c.plate ? `<div class="note warn">Numerį patikrinkite – Claude nėra tikras.</div>` : ''}
+    <div class="age"></div>
+    <div class="two">
+      <div><label class="f">Pažeidimo data</label><input type="date" class="date" value="${esc(d || '')}"></div>
+      <div><label class="f">Laikas</label><input type="time" class="time" value="${esc(t || '')}"></div>
+    </div>
+    <label class="f">Adresas</label><input type="text" class="addr" value="${esc(c.address || '')}">
+    <label class="f">Valstybinis numeris</label><input type="text" class="plate" value="${esc(c.plate)}">
+    <label class="f">Pažeidimai</label>
+    <div class="viol">${Object.entries(CFG.violations).map(([k, v]) => `<label><input type="checkbox" class="v" value="${k}" ${c.violations.includes(k) ? 'checked' : ''}> ${esc(v.label)} <span class="muted">(${v.ket} p.)</span></label>`).join('')}</div>
+    <label class="f">Papildoma aplinkybė (nebūtina)</label><input type="text" class="extra" value="${esc(c.extra)}">
+    <div class="row" style="justify-content:space-between;margin-top:10px"><label class="f" style="margin:0">Aprašymas</label><button class="regen">Perrašyti pagal laukus</button></div>
+    <textarea class="desc" maxlength="1000">${esc(c.description)}</textarea>
+    <div class="muted count"></div>
+    <div class="row" style="margin-top:12px"><button class="primary submit">Pateikti į tvarkaumiesta.lt</button></div>
+    <div class="result"></div>`;
+  $('#cases').appendChild(el);
+
+  const time = () => `${$('.date', el).value} ${$('.time', el).value}`;
+  const updAge = () => {
+    const a = ageDays(time());
+    const box = $('.age', el);
+    if (a != null && a > CFG.maxAgeDays) {
+      box.innerHTML = `<div class="note bad"><strong>Šio pranešimo VMSA nenagrinės.</strong> Pažeidimas užfiksuotas prieš ${a} d., o pagal naują savivaldybės reglamentą pranešimas turi būti pateiktas per ${CFG.maxAgeDays} d.
+        <label style="display:flex;gap:6px;margin-top:6px"><input type="checkbox" class="ack"> Suprantu ir vis tiek teikiu</label></div>`;
+    } else if (a != null) {
+      box.innerHTML = `<div class="muted">Pažeidimui ${a} d. – iki ${CFG.maxAgeDays} d. ribos liko ${CFG.maxAgeDays - a} d.</div>`;
+    } else box.innerHTML = '';
+  };
+  const updCount = () => { $('.count', el).textContent = `Liko simbolių: ${1000 - $('.desc', el).value.length}`; };
+  const selected = () => [...el.querySelectorAll('.ph:checked')].map(x => +x.value);
+  const viols = () => [...el.querySelectorAll('.v:checked')].map(x => x.value);
+  const regen = async () => {
+    const r = await fetch('api/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time: time(), address: $('.addr', el).value, plate: $('.plate', el).value.toUpperCase().replace(/\s+/g, ''), violations: viols(), extra: $('.extra', el).value, photoCount: selected().length }) });
+    $('.desc', el).value = (await r.json()).description; updCount();
+  };
+  $('.date', el).onchange = $('.time', el).onchange = updAge;
+  $('.desc', el).oninput = updCount;
+  $('.regen', el).onclick = regen;
+  updAge(); updCount();
+
+  $('.submit', el).onclick = async () => {
+    const plate = $('.plate', el).value.toUpperCase().replace(/\s+/g, '');
+    const ack = $('.ack', el)?.checked || false;
+    const a = ageDays(time());
+    if (a > CFG.maxAgeDays && !ack) { alert(`Pažeidimas senesnis nei ${CFG.maxAgeDays} d. – VMSA jo nenagrinės. Pažymėkite „Suprantu ir vis tiek teikiu“, jei teikiate.`); return; }
+    const msg = `Pateikti pranešimą?\n\n${time()} · ${$('.addr', el).value}\n${plate} · ${selected().length} nuotr.\n\n${$('.desc', el).value}` + (a > CFG.maxAgeDays ? `\n\n⚠ VMSA šio pranešimo nenagrinės (${a} d.).` : '');
+    if (!confirm(msg)) return;
+    const btn = $('.submit', el); btn.disabled = true; btn.textContent = 'Teikiama…';
+    try {
+      const r = await fetch('api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        batchId: BATCH, caseId: c.id, time: time(), address: $('.addr', el).value, lat: c.lat, lon: c.lon, plate,
+        description: $('.desc', el).value, photoIdx: selected(), violations: viols(), ackOld: ack }) });
+      const j = await r.json();
+      if (j.needsLogin) { refreshSession(); $('#loginCard').scrollIntoView({ behavior: 'smooth' }); }
+      if (!r.ok) throw new Error(j.error);
+      $('.result', el).innerHTML = `<div class="note ok">Užregistruota${j.id ? `: <a href="${esc(j.url)}" target="_blank" rel="noopener">pranešimas ${esc(j.id)}</a>` : ''}. Išsaugota: ${esc(j.folder)}</div>`;
+      btn.textContent = 'Pateikta';
+      loadJournal();
+    } catch (e) {
+      $('.result', el).innerHTML = `<div class="note bad">${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = 'Pateikti į tvarkaumiesta.lt';
+    }
+  };
+}
+
+async function loadJournal() {
+  const rows = await (await fetch('api/journal')).json();
+  $('#journal').innerHTML = rows.length ? `<table><tr><th>Pažeidimas</th><th>Adresas</th><th>Nr.</th><th>KET</th><th>Pranešimas</th></tr>${rows.map(r =>
+    `<tr><td>${esc(r.data_laikas)}</td><td>${esc(r.adresas)}</td><td>${esc(r.nr)}</td><td>${esc(r.ket)}</td><td>${r.pranesimo_nr ? `<a href="https://tvarkaumiesta.lt/pranesimai/${esc(r.pranesimo_nr)}" target="_blank" rel="noopener">${esc(r.pranesimo_nr)}</a>` : '—'}</td></tr>`).join('')}</table>` : 'Dar nėra.';
+}
+$('#reloadJournal').onclick = loadJournal;
+init();
+</script>
+</body>
+</html>
