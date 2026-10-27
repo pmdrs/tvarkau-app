@@ -24,6 +24,19 @@ Only list a violation the photos support. "blocking" means pedestrians cannot pa
 If the car may be on a private plot or in a marked parking space, say so in "doubts". Faces and people are irrelevant — never describe them.
 Write vehicle, extra and doubts in Lithuanian.`;
 
+// Checks a key without spending tokens (Models API).
+export async function verifyKey(apiKey) {
+  try {
+    await new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }).models.retrieve('claude-opus-5-5');
+    return null;
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return 'Raktas neteisingas arba atšauktas.';
+    if (e instanceof Anthropic.PermissionDeniedError) return 'Raktas neturi prieigos prie Claude Opus 5.5.';
+    if (e instanceof Anthropic.APIError) return `Anthropic API klaida ${e.status ?? ''}`.trim();
+    return `Nepavyko patikrinti rakto: ${e.message}`;
+  }
+}
+
 export async function analyzeIncident(jpegs, { time, address }) {
   const apiKey = secrets.anthropicKey();
   if (!apiKey) return { error: 'Nėra ANTHROPIC_API_KEY – užpildykite laukus ranka.' };

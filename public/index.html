@@ -39,11 +39,18 @@
   .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); }
   .pill.on { border-color:var(--ok); color:var(--ok); } .pill.off { border-color:var(--bad); color:var(--bad); }
   a { color: var(--accent); }
+  .flow { display:flex; align-items:stretch; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .flow .step { flex:1 1 150px; display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:13px; }
+  .flow .step.ai { border-color:var(--accent); }
+  .flow .ico { font-size:20px; line-height:1; }
+  .flow .arrow { align-self:center; color:var(--muted); }
+  @media (max-width: 640px) { .flow .arrow { display:none; } }
+  code { font-size:12px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Tvarkau miestą – stovėjimo pažeidimai</h1>
+  <div class="row" style="justify-content:space-between"><h1>Tvarkau miestą – stovėjimo pažeidimai</h1><button id="logoutTop" style="display:none">Atsijungti</button></div>
 
   <div class="card" id="loginCard">
     <div class="row" style="justify-content:space-between"><strong>Vilnius Login</strong><span id="sess" class="muted"></span></div>
@@ -70,11 +77,36 @@
     </div>
   </div>
 
+  <div class="card" id="aiCard">
+    <div class="row" style="justify-content:space-between"><strong>Claude atpažinimas</strong><span id="aiState"></span></div>
+    <div class="flow">
+      <div class="step"><div class="ico">📷</div><div><b>Nuotraukos</b><br><span class="muted">įkeliate kaip visada</span></div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="ico">⚙️</div><div><b>Visada automatiškai</b><br><span class="muted">data, laikas, adresas iš EXIF/GPS</span></div></div>
+      <div class="arrow">→</div>
+      <div class="step ai"><div class="ico">✨</div><div><b>Su Anthropic raktu</b><br><span class="muted">Claude perskaito valst. numerį, atpažįsta pažeidimą (šaligatvis, veja, perėja…), pasiūlo aprašymą ir įspėja apie abejones</span></div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="ico">✅</div><div><b>Jūs patikrinate</b><br><span class="muted">ir pateikiate</span></div></div>
+    </div>
+    <div class="two" style="margin-top:10px">
+      <div class="note ok" style="margin:0"><b>Su raktu:</b> mažiau rankinio darbo – laukai užpildyti, belieka patikrinti.<br><span class="muted">Kaina ~5–10 ct vienam atvejui (Anthropic sąskaita). Nuotraukos analizei siunčiamos Anthropic API.</span></div>
+      <div class="note warn" style="margin:0"><b>Be rakto:</b> viskas veikia rankiniu režimu – numerį ir pažeidimą įvedate patys. Jokie duomenys nesiunčiami trečiosioms šalims.</div>
+    </div>
+    <form id="keyForm" style="margin-top:12px" autocomplete="off">
+      <label class="f">Anthropic API raktas <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">(gauti console.anthropic.com)</a></label>
+      <div class="row" style="flex-wrap:nowrap"><input type="password" id="akey" placeholder="sk-ant-…" autocomplete="off" style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit">
+        <button class="primary" type="submit">Išsaugoti</button><button type="button" id="keyDel">Pašalinti</button></div>
+      <div class="muted" style="margin-top:4px">Raktas patikrinamas ir saugomas tik serveryje (<code>/data</code>, 600 teisės); naršyklei rodomi tik paskutiniai 4 simboliai.</div>
+      <div id="keyMsg" class="muted" style="margin-top:4px"></div>
+    </form>
+  </div>
+
   <div class="card">
     <div class="row">
       <input id="files" type="file" multiple accept="image/*,.heic,.heif">
       <label id="aiWrap" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="useAi" checked> Atpažinti su Claude</label>
       <button class="primary" id="analyze">Analizuoti</button>
+      <button id="clearAll" title="Išvalyti nuotraukas ir visus atvejus">Išvalyti</button>
     </div>
     <div id="modeNote" class="muted" style="margin-top:6px"></div>
     <div class="muted" style="margin-top:6px">Nuotraukos sugrupuojamos į atvejus pagal laiką ir vietą (EXIF). Iš telefono naršyklės EXIF vieta kartais būna išvalyta – tada adresą įveskite ranka.</div>
@@ -96,13 +128,52 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ageDays = t => t ? Math.floor((Date.now() - new Date(t.replace(' ', 'T'))) / 864e5) : null;
 
+function renderAi() {
+  const s = CFG.secrets;
+  $('#aiState').innerHTML = s.anthropic
+    ? `<span class="pill on">Įjungta · raktas ${esc(s.anthropicHint)}${s.anthropicSource === 'docker' ? ' (Docker secret)' : ''}</span>`
+    : '<span class="pill off">Rankinis režimas</span>';
+  $('#keyDel').style.display = s.anthropicSource === 'app' ? '' : 'none';
+  $('#akey').placeholder = s.anthropic ? 'Įveskite naują raktą, jei norite pakeisti' : 'sk-ant-…';
+  $('#aiWrap').style.display = s.anthropic ? 'flex' : 'none';
+  $('#modeNote').innerHTML = s.anthropic
+    ? ($('#useAi').checked ? '' : 'Rankinis režimas: Claude šį kartą nebus naudojamas.')
+    : '<span class="pill">Rankinis režimas</span> numerį ir pažeidimą pasirinksite patys; data, laikas ir adresas užpildomi automatiškai.';
+}
+
+$('#keyForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const key = $('#akey').value.trim();
+  if (!key) return;
+  $('#keyMsg').textContent = 'Tikrinamas raktas…';
+  const r = await fetch('api/anthropic-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+  const j = await r.json();
+  $('#akey').value = '';
+  if (!r.ok) { $('#keyMsg').innerHTML = `<span style="color:var(--bad)">${esc(j.error)}</span>`; return; }
+  CFG.secrets = j.secrets;
+  $('#keyMsg').innerHTML = '<span style="color:var(--ok)">Raktas patikrintas ir išsaugotas.</span>';
+  renderAi();
+};
+$('#keyDel').onclick = async () => {
+  if (!confirm('Pašalinti Anthropic raktą? Programa veiks rankiniu režimu.')) return;
+  const j = await (await fetch('api/anthropic-key', { method: 'DELETE' })).json();
+  CFG.secrets = j.secrets;
+  $('#keyMsg').textContent = 'Raktas pašalintas.';
+  renderAi();
+};
+
+$('#clearAll').onclick = () => {
+  $('#files').value = '';
+  $('#cases').innerHTML = '';
+  $('#progress').textContent = '';
+  BATCH = null;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
 async function init() {
   CFG = await (await fetch('api/config')).json();
-  if (!CFG.secrets.anthropic) {
-    $('#aiWrap').style.display = 'none';
-    $('#modeNote').innerHTML = '<span class="pill">Rankinis režimas</span> Claude API raktas nenustatytas – numerį ir pažeidimą pasirinksite patys, EXIF data, laikas ir adresas užpildomi automatiškai.';
-  }
-  $('#useAi').onchange = () => { $('#modeNote').textContent = $('#useAi').checked ? '' : 'Rankinis režimas: Claude nebus naudojamas.'; };
+  renderAi();
+  $('#useAi').onchange = renderAi;
   if (location.hash.startsWith('#import=')) await importFromHash(); else refreshSession();
   loadJournal();
 }
@@ -110,15 +181,24 @@ async function init() {
 async function refreshSession() {
   const s = await (await fetch('api/session')).json();
   if (s.loggedIn) {
-    $('#sess').innerHTML = `Prisijungta: <strong>${esc(s.name || '—')}</strong>${s.remembered ? ' (sesija išsaugota)' : ' (tik atmintyje)'} <button id="logout">Atsijungti</button>`;
-    $('#logout').onclick = async () => { await fetch('api/logout', { method: 'POST' }); refreshSession(); };
+    $('#sess').innerHTML = `Prisijungta: <strong>${esc(s.name || '—')}</strong>${s.remembered ? ' (likti prisijungus)' : ' (tik iki perkrovimo)'} <button id="logout">Atsijungti</button>`;
+    $('#logout').onclick = logout;
+    $('#logoutTop').style.display = '';
     $('#loginBox').style.display = 'none';
   } else {
     $('#sess').textContent = CFG.secrets.vilnius ? 'Neprisijungta – pateikiant bus naudojami išsaugoti duomenys' : 'Neprisijungta';
     $('#loginBox').style.display = 'block';
+    $('#logoutTop').style.display = 'none';
   }
   return s.loggedIn;
 }
+
+async function logout() {
+  await fetch('api/logout', { method: 'POST' });
+  $('#loginMsg').textContent = 'Atsijungta. Sesija ištrinta iš serverio.';
+  refreshSession();
+}
+$('#logoutTop').onclick = logout;
 
 // "Likti prisijungus" is a per-browser preference.
 const REMEMBER_KEY = 'tvarkau-remember';

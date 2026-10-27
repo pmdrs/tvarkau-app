@@ -3,11 +3,11 @@ import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzeIncident } from './ai.mjs';
+import { analyzeIncident, verifyKey } from './ai.mjs';
 import { reverseGeocode } from './geo.mjs';
 import { groupIncidents, processPhoto, summarize } from './photos.mjs';
 import { log } from './log.mjs';
-import { secretStatus } from './secrets.mjs';
+import { deleteAppAnthropicKey, saveAppAnthropicKey, secretStatus } from './secrets.mjs';
 import { archiveCase, ensureDirs, journalAdd, journalRows } from './store.mjs';
 import { buildDescription, VIOLATIONS } from './violations.mjs';
 import { applicantFrom, getUser, importSession, loginWith, logout, sessionInfo, submitReport } from './vilnius.mjs';
@@ -71,6 +71,23 @@ app.get('/api/photo/:batch/:idx', (req, res) => {
   const p = batches.get(req.params.batch)?.photos[+req.params.idx];
   if (!p) return res.sendStatus(404);
   res.type('jpeg').send(p.jpeg);
+});
+
+// Anthropic key entered in the app (stored in /data, never echoed back).
+app.post('/api/anthropic-key', async (req, res) => {
+  const key = String(req.body?.key || '').trim();
+  if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return res.status(400).json({ error: 'Tai nepanašu į Anthropic API raktą (turi prasidėti sk-ant-).' });
+  const problem = await verifyKey(key);
+  if (problem) { log.warn('config', 'anthropic key rejected', { reason: problem }); return res.status(400).json({ error: problem }); }
+  saveAppAnthropicKey(key);
+  log.info('config', 'anthropic key saved in /data', { hint: '…' + key.slice(-4) });
+  res.json({ ok: true, secrets: secretStatus() });
+});
+
+app.delete('/api/anthropic-key', (_req, res) => {
+  deleteAppAnthropicKey();
+  log.info('config', 'anthropic key removed from /data');
+  res.json({ ok: true, secrets: secretStatus() });
 });
 
 app.post('/api/describe', (req, res) => res.json({ description: buildDescription(req.body || {}) }));

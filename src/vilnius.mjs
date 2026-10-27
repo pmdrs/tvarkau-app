@@ -75,6 +75,27 @@ function pageError(html) {
   return m ? m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
 }
 
+// Builds the query of the "stay logged in?" form, or null if the page is something else.
+function stayLoggedForm(html, stayLogged) {
+  const m = html.match(/<form[^>]*action="https:\/\/login\.vilnius\.lt\/oauth\/authorize"[^>]*>([\s\S]*?)<\/form>/i);
+  if (!m || !/name="loggedin_choice"/.test(m[1])) return null;
+  const params = new URLSearchParams();
+  const attr = (tag, a) => (tag.match(new RegExp(`\\b${a}="([^"]*)"`, 'i')) || [])[1];
+  const radios = new Map();
+  for (const [tag] of m[1].matchAll(/<input\b[^>]*>/gi)) {
+    const name = attr(tag, 'name');
+    if (!name) continue;
+    const type = (attr(tag, 'type') || 'text').toLowerCase();
+    const value = (attr(tag, 'value') ?? '').replace(/&amp;/g, '&');
+    if (name === 'stay_logged') { if (stayLogged) params.set(name, value || 'on'); continue; }
+    if (type === 'checkbox') { if (/\bchecked\b/i.test(tag)) params.append(name, value || 'on'); continue; }
+    if (type === 'radio') { if (!radios.has(name) || /\bchecked\b/i.test(tag)) radios.set(name, value); continue; }
+    params.append(name, value);
+  }
+  for (const [name, value] of radios) params.set(name, value);
+  return params;
+}
+
 // Structure of an unexpected page for the log: no field values, only names and labels.
 function pageShape(html) {
   const text = s => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -115,11 +136,24 @@ async function login(username, password, { remember = true } = {}) {
   if (!csrf) throw new Error('Nerasta Vilnius Login forma');
 
   log.info('login', 'submitting Vilnius Login form', { user: maskUser(username) });
-  const done = await follow(jar, 'https://login.vilnius.lt/login', {
+  const stopAt = u => u.startsWith(`${SITE}/authorized`) || /login\.vilnius\.lt\/login(\?|$)/.test(u);
+  let done = await follow(jar, 'https://login.vilnius.lt/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://login.vilnius.lt/login', Origin: 'https://login.vilnius.lt' },
     body: new URLSearchParams({ _token: csrf, username, password }),
-  }, u => u.startsWith(`${SITE}/authorized`) || /login\.vilnius\.lt\/login(\?|$)/.test(u));
+  }, stopAt);
+
+  // Interstitial "stay logged in?" page: a GET form back to /oauth/authorize with the
+  // OAuth params, a `loggedin_choice` field and a `stay_logged` checkbox. Submit it like
+  // the "Tęsti" button would, ticking stay_logged only when the user chose "Likti prisijungus".
+  if (/login\.vilnius\.lt\/oauth\/authorize/.test(done.url) && done.res.status === 200) {
+    const html = await done.res.clone().text();
+    const form = stayLoggedForm(html, remember);
+    if (form) {
+      log.info('login', 'answering stay-logged-in choice', { stayLogged: remember, fields: [...form.keys()].join(',') });
+      done = await follow(jar, `https://login.vilnius.lt/oauth/authorize?${form}`, { headers: { Referer: done.url } }, stopAt);
+    }
+  }
 
   if (!done.url.startsWith(`${SITE}/authorized`)) {
     const at = shortUrl(done.url);
@@ -132,12 +166,17 @@ async function login(username, password, { remember = true } = {}) {
       throw new Error(`Vilnius Login atmetė prisijungimą${msg ? `: „${msg}“` : ' – patikrinkite vartotojo vardą (ne el. paštą, jei jie skiriasi) ir slaptažodį'}.`);
     }
     if (/\/oauth\/authorize$/.test(at)) {
-      throw new Error('Vilnius Login prašo patvirtinti tvarkaumiesta.lt prieigą. Vieną kartą prisijunkite naršyklėje: tvarkaumiesta.lt → Prisijungti → Vilnius Login → patvirtinkite, tada bandykite čia dar kartą.');
+      throw new Error('Vilnius Login po prisijungimo parodė netikėtą puslapį – jo struktūra įrašyta į programos logą.');
     }
     throw new Error(`Prisijungimas sustojo ties ${at} (HTTP ${done.res.status})${msg ? `: „${msg}“` : ''}.`);
   }
-  const accessCode = new URLSearchParams(done.url.split('#')[1] || '').get('accessCode');
-  if (!accessCode) throw new Error('Negautas accessCode po prisijungimo');
+  // The site reads it from the query string (?accessCode=…); accept a fragment too.
+  const back = new URL(done.url);
+  const accessCode = back.searchParams.get('accessCode') || new URLSearchParams(back.hash.slice(1)).get('accessCode');
+  if (!accessCode) {
+    log.error('login', 'no accessCode on return URL', { params: [...back.searchParams.keys(), ...new URLSearchParams(back.hash.slice(1)).keys()].join(',') || '-' });
+    throw new Error('Negautas accessCode po prisijungimo');
+  }
   log.info('login', 'got accessCode, exchanging for user token');
 
   const fd = new FormData();

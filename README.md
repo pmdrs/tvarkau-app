@@ -25,10 +25,17 @@ Portainer šablonas: [`deploy/portainer-stack.example.yaml`](deploy/portainer-st
 | Secret | Paskirtis | Jei tuščias |
 |---|---|---|
 | `vilnius_username`, `vilnius_password` | automatinis prisijungimas | prisijungiate pačioje programoje |
-| `anthropic_api_key` | numerio ir pažeidimo atpažinimas | rankinis režimas |
+| `anthropic_api_key` | numerio ir pažeidimo atpažinimas | raktą galima įvesti programoje (saugomas `/data/anthropic_api_key`, 600), kitaip – rankinis režimas |
 | `applicant.json` | pareiškėjo duomenys, jei jų trūksta Vilnius Login profilyje | naudojamas tik profilis |
 
-Programoje įvestas slaptažodis naudojamas tik prisijungimui ir niekur neišsaugomas. Pažymėjus „Prisiminti sesiją“, `/data/session.json` išsaugomas tik sesijos raktas.
+## Prisijungimas
+
+- **El. paštas ir slaptažodis (Vilnius Login)** – veikia ir iš telefono. Slaptažodis naudojamas tik prisijungimui ir niekur neišsaugomas.
+- **Žymė „→ Parking“** – prisijungiate tvarkaumiesta.lt savo naršyklėje (taip pat per e. valdžios vartus) ir perduodate sesiją programai.
+- **„Likti prisijungus“** – pažymėjus sesijos raktas saugomas `/data/session.json` (600), o Vilnius Login „likti prisijungus“ atsakoma „taip“. Nepažymėjus sesija laikoma tik atmintyje; pasibaigus – naudojami Docker secrets prisijungimo duomenys (jei nustatyti).
+- **Atsijungti** – ištrina sesiją iš serverio.
+
+Visi prisijungimo žingsniai rašomi į `docker logs` tik kaip host + kelias, be parametrų, slapukų reikšmių, slaptažodžių ar raktų.
 
 ## Saugumas
 
