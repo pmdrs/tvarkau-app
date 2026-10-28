@@ -9,6 +9,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
+# Claude Code CLI for the "Claude Code (headless)" AI option (`claude -p`).
+RUN npm install -g @anthropic-ai/claude-code@2.1.310 && npm cache clean --force
+
 COPY src ./src
 COPY public ./public
 

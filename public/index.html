@@ -10,17 +10,25 @@
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   main { max-width: 860px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  .top { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin: 4px 0 12px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .muted { color:var(--muted); font-size:13px; }
   label.f { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
-  input[type=text], input[type=date], input[type=time], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  input[type=text], input[type=password], input[type=date], input[type=time], input[type=url], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
   textarea { min-height: 120px; resize: vertical; }
+  .missing, .missing:focus { border-color: var(--bad) !important; outline-color: var(--bad); }
+  .viol.missing { border:1px solid var(--bad); border-radius:8px; padding:6px; }
   .plate { font-weight:700; text-transform:uppercase; letter-spacing:1px; max-width: 200px; }
   button { padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   button:disabled { opacity:.5; cursor:default; }
+  button.gear { position:relative; }
+  button.gear .dot { position:absolute; top:-4px; right:-4px; width:12px; height:12px; border-radius:50%; background:var(--bad); border:2px solid var(--bg); display:none; }
+  button.gear.alert .dot { display:block; }
   .thumbs { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
   .thumbs label { position:relative; }
   .thumbs img { width:110px; height:110px; object-fit:cover; border-radius:8px; border:2px solid var(--line); display:block; }
@@ -30,14 +38,15 @@
   .note.warn { background:var(--warn-bg); color:var(--warn); }
   .note.bad { background:var(--bad-bg); color:var(--bad); }
   .note.ok { background:transparent; border:1px solid var(--ok); color:var(--ok); }
+  .note ul { margin:4px 0 0 18px; padding:0; }
   .viol { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:4px 12px; }
   .viol label { display:flex; gap:6px; align-items:center; }
   .two { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); }
-  .pill.on { border-color:var(--ok); color:var(--ok); } .pill.off { border-color:var(--bad); color:var(--bad); }
+  .pill { display:inline-flex; gap:4px; align-items:center; padding:3px 9px; border-radius:999px; font-size:12px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; white-space:nowrap; }
+  .pill.on { border-color:var(--ok); color:var(--ok); } .pill.off { border-color:var(--bad); color:var(--bad); } .pill.mid { border-color:var(--warn); color:var(--warn); }
   a { color: var(--accent); }
   .flow { display:flex; align-items:stretch; gap:6px; margin-top:10px; flex-wrap:wrap; }
   .flow .step { flex:1 1 150px; display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:13px; }
@@ -45,160 +54,279 @@
   .flow .ico { font-size:20px; line-height:1; }
   .flow .arrow { align-self:center; color:var(--muted); }
   @media (max-width: 640px) { .flow .arrow { display:none; } }
+  .prov { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin-top:8px; }
+  .prov label { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:10px; padding:10px; cursor:pointer; }
+  .prov label:has(input:checked) { border-color:var(--accent); }
+  .prov small { display:block; color:var(--muted); font-size:12px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:10px; }
   code { font-size:12px; }
+  [hidden] { display:none !important; }
 </style>
 </head>
 <body>
 <main>
-  <div class="row" style="justify-content:space-between"><h1>Tvarkau miestą – stovėjimo pažeidimai</h1><button id="logoutTop" style="display:none">Atsijungti</button></div>
+  <div class="top">
+    <h1>Tvarkau miestą – stovėjimo pažeidimai</h1>
+    <div class="row">
+      <div class="chips" id="chips"></div>
+      <button class="gear" id="gear" title="Nustatymai">⚙️ Nustatymai<span class="dot"></span></button>
+    </div>
+  </div>
 
-  <div class="card" id="loginCard">
-    <div class="row" style="justify-content:space-between"><strong>Vilnius Login</strong><span id="sess" class="muted"></span></div>
-    <div id="loginBox" style="display:none;margin-top:8px">
-      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="lr"> <strong>Likti prisijungus</strong></label>
-      <div class="muted">Pažymėta – sesijos raktas išsaugomas serveryje ir galioja iki jo pabaigos (ir po perkrovimo). Nepažymėta – sesija laikoma tik atmintyje; jai pasibaigus naudojami programoje išsaugoti prisijungimo duomenys (jei nustatyti), kitaip prisijungti reikės iš naujo. Slaptažodis niekada neišsaugomas.</div>
+  <!-- ===== Main view ===== -->
+  <div id="mainView">
+    <div id="missingBar"></div>
 
-      <div style="margin-top:12px"><strong>1 būdas – per naršyklę (rekomenduojamas)</strong></div>
-      <ol class="muted" style="margin:4px 0 0 18px;padding:0">
-        <li>Nutempkite šią nuorodą į žymių juostą (vieną kartą): <a id="bm" class="pill on" style="text-decoration:none">→ Parking</a></li>
-        <li>Prisijunkite <a href="https://tvarkaumiesta.lt" target="_blank" rel="noopener">tvarkaumiesta.lt</a> įprastai (Vilnius Login ar e. valdžios vartai).</li>
-        <li>Ten paspauskite žymę „→ Parking“ – sesija bus perduota čia.</li>
-      </ol>
+    <div class="card">
+      <div class="row">
+        <input id="files" type="file" multiple accept="image/*,.heic,.heif">
+        <label id="aiWrap" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="useAi" checked> <span id="aiWrapLabel">Atpažinti su AI</span></label>
+        <button class="primary" id="analyze">Analizuoti</button>
+        <button id="clearAll" title="Išvalyti nuotraukas ir visus atvejus">Išvalyti</button>
+      </div>
+      <div id="modeNote" class="muted" style="margin-top:6px"></div>
+      <div class="muted" style="margin-top:6px">Nuotraukos sugrupuojamos į atvejus pagal laiką ir vietą (EXIF). Iš telefono naršyklės EXIF vieta kartais būna išvalyta – tada adresą įveskite ranka.</div>
+      <div id="progress" class="muted"></div>
+    </div>
 
-      <form id="loginForm" style="margin-top:14px" autocomplete="on">
-        <div><strong>2 būdas – Vilnius Login el. paštas ir slaptažodis</strong></div>
-        <div class="two">
-          <div><label class="f">El. paštas</label><input type="text" id="lu" autocomplete="username" inputmode="email"></div>
-          <div><label class="f">Slaptažodis</label><input type="password" id="lp" autocomplete="current-password" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit"></div>
-        </div>
-        <div class="row" style="margin-top:10px"><button class="primary" type="submit">Prisijungti</button></div>
-      </form>
+    <div id="cases"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><strong>Pateikti pranešimai</strong><button id="reloadJournal">Atnaujinti</button></div>
+      <div id="journal" class="muted">…</div>
+    </div>
+  </div>
+
+  <!-- ===== Settings view ===== -->
+  <div id="settingsView" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><button id="back">← Atgal</button><span class="muted">Nustatymai saugomi serveryje (<code>/data</code>)</span></div>
+
+    <div class="card" id="set-vilnius">
+      <div class="row" style="justify-content:space-between"><h2>Vilnius Login</h2><span id="sess" class="muted"></span></div>
+      <div id="loginBox" style="display:none;margin-top:8px">
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="lr"> <strong>Likti prisijungus</strong></label>
+        <div class="muted">Pažymėta – sesijos raktas išsaugomas serveryje ir galioja iki jo pabaigos (ir po perkrovimo). Nepažymėta – sesija laikoma tik atmintyje. Slaptažodis niekada neišsaugomas.</div>
+
+        <div style="margin-top:12px"><strong>1 būdas – per naršyklę (rekomenduojamas)</strong></div>
+        <ol class="muted" style="margin:4px 0 0 18px;padding:0">
+          <li>Nutempkite šią nuorodą į žymių juostą (vieną kartą): <a id="bm" class="pill on" style="text-decoration:none">→ Parking</a></li>
+          <li>Prisijunkite <a href="https://tvarkaumiesta.lt" target="_blank" rel="noopener">tvarkaumiesta.lt</a> įprastai (Vilnius Login ar e. valdžios vartai).</li>
+          <li>Ten paspauskite žymę „→ Parking“ – sesija bus perduota čia.</li>
+        </ol>
+
+        <form id="loginForm" style="margin-top:14px" autocomplete="on">
+          <div><strong>2 būdas – Vilnius Login el. paštas ir slaptažodis</strong></div>
+          <div class="two">
+            <div><label class="f">El. paštas</label><input type="text" id="lu" autocomplete="username" inputmode="email"></div>
+            <div><label class="f">Slaptažodis</label><input type="password" id="lp" autocomplete="current-password"></div>
+          </div>
+          <div class="row" style="margin-top:10px"><button class="primary" type="submit">Prisijungti</button></div>
+        </form>
+      </div>
       <div id="loginMsg" class="muted" style="margin-top:6px"></div>
     </div>
-  </div>
 
-  <div class="card" id="aiCard">
-    <div class="row" style="justify-content:space-between"><strong>Claude atpažinimas</strong><span id="aiState"></span></div>
-    <div class="flow">
-      <div class="step"><div class="ico">📷</div><div><b>Nuotraukos</b><br><span class="muted">įkeliate kaip visada</span></div></div>
-      <div class="arrow">→</div>
-      <div class="step"><div class="ico">⚙️</div><div><b>Visada automatiškai</b><br><span class="muted">data, laikas, adresas iš EXIF/GPS</span></div></div>
-      <div class="arrow">→</div>
-      <div class="step ai"><div class="ico">✨</div><div><b>Su Anthropic raktu</b><br><span class="muted">Claude perskaito valst. numerį, atpažįsta pažeidimą (šaligatvis, veja, perėja…), pasiūlo aprašymą ir įspėja apie abejones</span></div></div>
-      <div class="arrow">→</div>
-      <div class="step"><div class="ico">✅</div><div><b>Jūs patikrinate</b><br><span class="muted">ir pateikiate</span></div></div>
+    <div class="card" id="set-applicant">
+      <h2>Pareiškėjo duomenys</h2>
+      <div class="muted">Siunčiami kartu su pranešimu. Tušti laukai imami iš Vilnius Login profilio, tada iš <code>applicant.json</code> secret. Čia įvesti duomenys turi pirmenybę.</div>
+      <form id="applicantForm" autocomplete="on">
+        <div class="two" id="applicantFields"></div>
+        <div class="row" style="margin-top:10px"><button class="primary" type="submit">Išsaugoti</button><span id="applicantMsg" class="muted"></span></div>
+      </form>
     </div>
-    <div class="two" style="margin-top:10px">
-      <div class="note ok" style="margin:0"><b>Su raktu:</b> mažiau rankinio darbo – laukai užpildyti, belieka patikrinti.<br><span class="muted">Kaina ~5–10 ct vienam atvejui (Anthropic sąskaita). Nuotraukos analizei siunčiamos Anthropic API.</span></div>
-      <div class="note warn" style="margin:0"><b>Be rakto:</b> viskas veikia rankiniu režimu – numerį ir pažeidimą įvedate patys. Jokie duomenys nesiunčiami trečiosioms šalims.</div>
+
+    <div class="card" id="set-ai">
+      <div class="row" style="justify-content:space-between"><h2>Atpažinimas (AI)</h2><span id="aiState"></span></div>
+      <div class="muted">AI perskaito valstybinį numerį, atpažįsta pažeidimą ir pasiūlo aprašymą – jūs tik patikrinate. Be AI viskas veikia rankiniu režimu.</div>
+      <div class="prov" id="providers"></div>
+      <form id="aiForm" autocomplete="off" style="margin-top:6px">
+        <div id="aiFields"></div>
+        <div class="row" style="margin-top:10px"><button class="primary" type="submit" id="aiSave">Patikrinti ir išsaugoti</button><button type="button" id="keyDel">Pašalinti raktą</button></div>
+        <div id="aiMsg" class="muted" style="margin-top:6px"></div>
+      </form>
+      <details>
+        <summary>Kaip tai veikia ir kas siunčiama</summary>
+        <div class="flow">
+          <div class="step"><div class="ico">📷</div><div><b>Nuotraukos</b><br><span class="muted">įkeliate kaip visada</span></div></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ico">⚙️</div><div><b>Visada automatiškai</b><br><span class="muted">data, laikas, adresas iš EXIF/GPS</span></div></div>
+          <div class="arrow">→</div>
+          <div class="step ai"><div class="ico">✨</div><div><b>Su AI</b><br><span class="muted">perskaito numerį, atpažįsta pažeidimą, įspėja apie abejones</span></div></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ico">✅</div><div><b>Jūs patikrinate</b><br><span class="muted">ir pateikiate</span></div></div>
+        </div>
+        <ul class="muted" style="margin:10px 0 0 18px;padding:0">
+          <li><b>Claude API / OpenAI / Gemini:</b> iki 4 nuotraukų siunčiama pasirinkto tiekėjo API; mokama pagal naudojimą (~5–10 ct atvejui).</li>
+          <li><b>Claude Code (headless):</b> konteineryje paleidžiamas <code>claude -p</code>. Su prenumeratos tokenu (<code>claude setup-token</code>) naudojamas jūsų Claude Pro/Max limitas, o ne API sąskaita.</li>
+          <li><b>OpenAI-suderinamas:</b> Ollama, LM Studio, OpenRouter ir kt. Vietinis modelis (Ollama) – nuotraukos neišeina iš jūsų tinklo; modelis turi palaikyti vaizdus.</li>
+          <li>Raktai saugomi tik serveryje (<code>/data/keys</code>, 600 teisės); naršyklei rodomi tik paskutiniai 4 simboliai. Docker secret turi pirmenybę.</li>
+        </ul>
+      </details>
     </div>
-    <form id="keyForm" style="margin-top:12px" autocomplete="off">
-      <label class="f">Anthropic API raktas <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">(gauti console.anthropic.com)</a></label>
-      <div class="row" style="flex-wrap:nowrap"><input type="password" id="akey" placeholder="sk-ant-…" autocomplete="off" style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit">
-        <button class="primary" type="submit">Išsaugoti</button><button type="button" id="keyDel">Pašalinti</button></div>
-      <div class="muted" style="margin-top:4px">Raktas patikrinamas ir saugomas tik serveryje (<code>/data</code>, 600 teisės); naršyklei rodomi tik paskutiniai 4 simboliai.</div>
-      <div id="keyMsg" class="muted" style="margin-top:4px"></div>
-    </form>
-  </div>
-
-  <div class="card">
-    <div class="row">
-      <input id="files" type="file" multiple accept="image/*,.heic,.heif">
-      <label id="aiWrap" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="useAi" checked> Atpažinti su Claude</label>
-      <button class="primary" id="analyze">Analizuoti</button>
-      <button id="clearAll" title="Išvalyti nuotraukas ir visus atvejus">Išvalyti</button>
-    </div>
-    <div id="modeNote" class="muted" style="margin-top:6px"></div>
-    <div class="muted" style="margin-top:6px">Nuotraukos sugrupuojamos į atvejus pagal laiką ir vietą (EXIF). Iš telefono naršyklės EXIF vieta kartais būna išvalyta – tada adresą įveskite ranka.</div>
-    <div id="progress" class="muted"></div>
-  </div>
-
-  <div id="cases"></div>
-
-  <div class="card">
-    <div class="row" style="justify-content:space-between"><strong>Pateikti pranešimai</strong><button id="reloadJournal">Atnaujinti</button></div>
-    <div id="journal" class="muted">…</div>
   </div>
 </main>
 
 <script>
-let CFG = { maxAgeDays: 30, violations: {} };
+let CFG = { maxAgeDays: 30, violations: {}, applicantFields: {} };
+let STATUS = null;
 let BATCH = null;
+let PICK = null; // provider selected in the settings form
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ageDays = t => t ? Math.floor((Date.now() - new Date(t.replace(' ', 'T'))) / 864e5) : null;
+const postJson = (url, body, method = 'POST') => fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const aiLabel = () => STATUS?.ai.providers[STATUS.ai.provider]?.label || 'AI';
 
-function renderAi() {
-  const s = CFG.secrets;
-  $('#aiState').innerHTML = s.anthropic
-    ? `<span class="pill on">Įjungta · raktas ${esc(s.anthropicHint)}${s.anthropicSource === 'docker' ? ' (Docker secret)' : ''}</span>`
-    : '<span class="pill off">Rankinis režimas</span>';
-  $('#keyDel').style.display = s.anthropicSource === 'app' ? '' : 'none';
-  $('#akey').placeholder = s.anthropic ? 'Įveskite naują raktą, jei norite pakeisti' : 'sk-ant-…';
-  $('#aiWrap').style.display = s.anthropic ? 'flex' : 'none';
-  $('#modeNote').innerHTML = s.anthropic
-    ? ($('#useAi').checked ? '' : 'Rankinis režimas: Claude šį kartą nebus naudojamas.')
-    : '<span class="pill">Rankinis režimas</span> numerį ir pažeidimą pasirinksite patys; data, laikas ir adresas užpildomi automatiškai.';
+// ---------- views ----------
+function route() {
+  const settings = location.hash.startsWith('#nustatymai');
+  $('#settingsView').hidden = !settings;
+  $('#mainView').hidden = settings;
+  if (settings) {
+    renderSettings();
+    const target = document.getElementById('set-' + location.hash.split('/')[1]);
+    (target || document.body).scrollIntoView({ block: 'start' });
+  }
+}
+const openSettings = area => { location.hash = area ? `#nustatymai/${area}` : '#nustatymai'; };
+$('#gear').onclick = () => openSettings();
+$('#back').onclick = () => { history.length > 1 && location.hash ? history.back() : (location.hash = ''); };
+window.addEventListener('hashchange', route);
+
+// ---------- status: chips + missing bar ----------
+async function loadStatus() {
+  STATUS = await (await fetch('api/status')).json();
+  renderStatus();
+  if (!$('#settingsView').hidden) renderSettings();
 }
 
-$('#keyForm').onsubmit = async ev => {
-  ev.preventDefault();
-  const key = $('#akey').value.trim();
-  if (!key) return;
-  $('#keyMsg').textContent = 'Tikrinamas raktas…';
-  const r = await fetch('api/anthropic-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
-  const j = await r.json();
-  $('#akey').value = '';
-  if (!r.ok) { $('#keyMsg').innerHTML = `<span style="color:var(--bad)">${esc(j.error)}</span>`; return; }
-  CFG.secrets = j.secrets;
-  $('#keyMsg').innerHTML = '<span style="color:var(--ok)">Raktas patikrintas ir išsaugotas.</span>';
-  renderAi();
-};
-$('#keyDel').onclick = async () => {
-  if (!confirm('Pašalinti Anthropic raktą? Programa veiks rankiniu režimu.')) return;
-  const j = await (await fetch('api/anthropic-key', { method: 'DELETE' })).json();
-  CFG.secrets = j.secrets;
-  $('#keyMsg').textContent = 'Raktas pašalintas.';
-  renderAi();
-};
+function renderStatus() {
+  const s = STATUS, ai = s.ai;
+  const chip = (cls, text, area, title = '') => `<span class="pill ${cls}" data-area="${area}" title="${esc(title)}">${text}</span>`;
+  const vil = s.session.loggedIn ? chip('on', `✓ ${esc(s.session.name || 'Prisijungta')}`, 'vilnius')
+    : s.session.credsSaved ? chip('mid', '◐ Vilnius: išsaugoti duomenys', 'vilnius', 'Prisijungs pateikiant') : chip('off', '✗ Neprisijungta', 'vilnius');
+  const aiChip = ai.provider === 'none' ? chip('', 'Rankinis režimas', 'ai')
+    : ai.ready ? chip('on', `✨ ${esc(aiLabel())}`, 'ai', ai.providers[ai.provider].model) : chip('off', `✗ ${esc(aiLabel())}: trūksta`, 'ai');
+  const app = s.applicant.missing.length ? chip('off', `✗ Pareiškėjas: trūksta ${s.applicant.missing.length}`, 'applicant', s.applicant.missing.join(', ')) : chip('on', '✓ Pareiškėjas', 'applicant');
+  $('#chips').innerHTML = vil + aiChip + app;
+  $('#chips').querySelectorAll('.pill').forEach(p => p.onclick = () => openSettings(p.dataset.area));
+  $('#gear').classList.toggle('alert', s.missing.length > 0);
+  $('#missingBar').innerHTML = s.missing.length
+    ? `<div class="note bad"><strong>Trūksta nustatymų:</strong><ul>${s.missing.map(m => `<li><a href="#nustatymai/${m.area}">${esc(m.text)}</a></li>`).join('')}</ul></div>` : '';
 
-$('#clearAll').onclick = () => {
-  $('#files').value = '';
-  $('#cases').innerHTML = '';
-  $('#progress').textContent = '';
-  BATCH = null;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-async function init() {
-  CFG = await (await fetch('api/config')).json();
-  renderAi();
-  $('#useAi').onchange = renderAi;
-  if (location.hash.startsWith('#import=')) await importFromHash(); else refreshSession();
-  loadJournal();
+  $('#aiWrap').style.display = ai.ready ? 'flex' : 'none';
+  $('#aiWrapLabel').textContent = `Atpažinti su ${aiLabel()}`;
+  $('#modeNote').innerHTML = ai.ready
+    ? ($('#useAi').checked ? '' : `Rankinis režimas: ${esc(aiLabel())} šį kartą nebus naudojamas.`)
+    : `<span class="pill" data-area="ai">Rankinis režimas</span> numerį ir pažeidimą pasirinksite patys; data, laikas ir adresas užpildomi automatiškai. <a href="#nustatymai/ai">Įjungti AI</a>`;
+  document.querySelectorAll('#cases .card').forEach(el => el.validate?.());
 }
 
-async function refreshSession() {
-  const s = await (await fetch('api/session')).json();
+// ---------- settings ----------
+function renderSettings() {
+  if (!STATUS) return;
+  renderSession();
+  renderApplicant();
+  renderAi();
+}
+
+function renderSession() {
+  const s = STATUS.session;
   if (s.loggedIn) {
     $('#sess').innerHTML = `Prisijungta: <strong>${esc(s.name || '—')}</strong>${s.remembered ? ' (likti prisijungus)' : ' (tik iki perkrovimo)'} <button id="logout">Atsijungti</button>`;
     $('#logout').onclick = logout;
-    $('#logoutTop').style.display = '';
     $('#loginBox').style.display = 'none';
   } else {
-    $('#sess').textContent = CFG.secrets.vilnius ? 'Neprisijungta – pateikiant bus naudojami išsaugoti duomenys' : 'Neprisijungta';
+    $('#sess').innerHTML = s.credsSaved ? 'Neprisijungta – pateikiant bus naudojami išsaugoti duomenys' : '<span style="color:var(--bad)">Neprisijungta</span>';
     $('#loginBox').style.display = 'block';
-    $('#logoutTop').style.display = 'none';
   }
-  return s.loggedIn;
 }
 
+function renderApplicant() {
+  const a = STATUS.applicant;
+  const box = $('#applicantFields');
+  if (box.dataset.dirty) return; // don't overwrite what the user is typing
+  box.innerHTML = Object.entries(CFG.applicantFields).map(([k, label]) => {
+    const effective = a.values[k], own = a.app[k];
+    const src = own ? '' : effective ? ' <span class="muted">(iš profilio / secret)</span>' : ' <span style="color:var(--bad)">– trūksta</span>';
+    return `<div><label class="f">${esc(label)}${src}</label><input type="text" name="${k}" value="${esc(own)}" placeholder="${esc(own ? '' : effective)}" class="${effective ? '' : 'missing'}"></div>`;
+  }).join('');
+  box.oninput = () => { box.dataset.dirty = '1'; };
+}
+
+$('#applicantForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const values = Object.fromEntries([...$('#applicantFields').querySelectorAll('input')].map(i => [i.name, i.value]));
+  const r = await postJson('api/settings/applicant', values);
+  $('#applicantMsg').innerHTML = r.ok ? '<span style="color:var(--ok)">Išsaugota.</span>' : '<span style="color:var(--bad)">Nepavyko išsaugoti.</span>';
+  delete $('#applicantFields').dataset.dirty;
+  await loadStatus();
+};
+
+const PROVIDER_ORDER = ['none', 'anthropic', 'claude-code', 'openai', 'gemini', 'custom'];
+const PROVIDER_NOTE = {
+  none: 'be AI, viską įvedate patys',
+  anthropic: 'API raktas, mokama pagal naudojimą',
+  'claude-code': 'claude -p su prenumeratos tokenu',
+  openai: 'GPT modeliai su vaizdu',
+  gemini: 'Google AI Studio raktas',
+  custom: 'Ollama, LM Studio, OpenRouter…',
+};
+
+function renderAi() {
+  const ai = STATUS.ai;
+  PICK = PICK || ai.provider;
+  $('#aiState').innerHTML = ai.provider === 'none' ? '<span class="pill">Rankinis režimas</span>'
+    : ai.ready ? `<span class="pill on">Įjungta · ${esc(aiLabel())}</span>` : `<span class="pill off">${esc(aiLabel())}: trūksta ${esc(ai.missing.join(', '))}</span>`;
+  $('#providers').innerHTML = PROVIDER_ORDER.map(id => {
+    const label = id === 'none' ? 'Rankinis' : ai.providers[id].label;
+    const active = id === ai.provider ? ' <span class="pill on" style="cursor:default">naudojamas</span>' : '';
+    return `<label><input type="radio" name="prov" value="${id}" ${id === PICK ? 'checked' : ''}><span><b>${esc(label)}</b>${active}<small>${esc(PROVIDER_NOTE[id])}</small></span></label>`;
+  }).join('');
+  $('#providers').onchange = ev => { PICK = ev.target.value; $('#aiMsg').textContent = ''; renderAiFields(); };
+  renderAiFields();
+}
+
+function renderAiFields() {
+  const p = STATUS.ai.providers[PICK];
+  $('#keyDel').style.display = p?.keySource === 'app' ? '' : 'none';
+  $('#aiSave').textContent = PICK === 'none' ? 'Išsaugoti' : 'Patikrinti ir išsaugoti';
+  if (PICK === 'none') { $('#aiFields').innerHTML = '<div class="muted" style="margin-top:8px">Numerį ir pažeidimą įvesite patys. Jokie duomenys nesiunčiami trečiosioms šalims.</div>'; return; }
+  const keyState = p.keySource === 'docker' ? `nustatytas Docker secret (${esc(p.keyHint)})` : p.keySource === 'app' ? `išsaugotas (${esc(p.keyHint)})` : p.keyOptional ? 'nebūtinas' : '<span style="color:var(--bad)">trūksta</span>';
+  $('#aiFields').innerHTML = `
+    ${p.needsBaseUrl ? `<label class="f">Adresas (base URL), pvz. <code>http://localhost:11434/v1</code></label><input type="url" id="aiBase" value="${esc(p.baseUrl)}" class="${p.baseUrl ? '' : 'missing'}" placeholder="http://…/v1">` : ''}
+    <label class="f">Modelis${p.defaultModel ? ` <span class="muted">(numatytas ${esc(p.defaultModel)})</span>` : ''}</label>
+    <input type="text" id="aiModel" value="${esc(p.model)}" class="${p.model ? '' : 'missing'}" placeholder="${esc(p.defaultModel || 'pvz. llava, qwen2.5vl')}">
+    <label class="f">Raktas – ${keyState}. <span class="muted">${esc(p.keyHelp)}</span></label>
+    <input type="password" id="aiKey" autocomplete="off" placeholder="${p.keySource ? 'Įveskite naują, jei norite pakeisti' : 'raktas'}" class="${p.keySource || p.keyOptional ? '' : 'missing'}">`;
+}
+
+$('#aiForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const body = { provider: PICK, model: $('#aiModel')?.value.trim(), baseUrl: $('#aiBase')?.value.trim(), key: $('#aiKey')?.value.trim() };
+  $('#aiMsg').textContent = PICK === 'none' ? 'Saugoma…' : 'Tikrinama (Claude Code gali užtrukti iki minutės)…';
+  $('#aiSave').disabled = true;
+  try {
+    const r = await postJson('api/settings/ai', body);
+    const j = await r.json();
+    if ($('#aiKey')) $('#aiKey').value = '';
+    $('#aiMsg').innerHTML = r.ok ? '<span style="color:var(--ok)">Patikrinta ir išsaugota.</span>' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
+    await loadStatus();
+  } finally { $('#aiSave').disabled = false; }
+};
+$('#keyDel').onclick = async () => {
+  if (!confirm(`Pašalinti ${STATUS.ai.providers[PICK].label} raktą?`)) return;
+  await fetch(`api/settings/ai-key/${PICK}`, { method: 'DELETE' });
+  $('#aiMsg').textContent = 'Raktas pašalintas.';
+  await loadStatus();
+};
+
+// ---------- Vilnius Login ----------
 async function logout() {
   await fetch('api/logout', { method: 'POST' });
   $('#loginMsg').textContent = 'Atsijungta. Sesija ištrinta iš serverio.';
-  refreshSession();
+  loadStatus();
 }
-$('#logoutTop').onclick = logout;
 
 // "Likti prisijungus" is a per-browser preference.
 const REMEMBER_KEY = 'tvarkau-remember';
@@ -216,32 +344,40 @@ async function importFromHash() {
   history.replaceState(null, '', location.pathname); // drop the token from the address bar
   let user;
   try { user = JSON.parse(decodeURIComponent(m[1])); } catch { $('#loginMsg').innerHTML = '<span style="color:var(--bad)">Netinkami sesijos duomenys</span>'; return; }
-  const r = await fetch('api/session/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user, remember: $('#lr').checked }) });
+  const r = await postJson('api/session/import', { user, remember: $('#lr').checked });
   const j = await r.json();
   $('#loginMsg').innerHTML = j.ok ? '' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
-  refreshSession();
 }
 
 $('#loginForm').onsubmit = async ev => {
   ev.preventDefault();
   $('#loginMsg').textContent = 'Jungiamasi…';
-  const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: $('#lu').value, password: $('#lp').value, remember: $('#lr').checked }) });
+  const r = await postJson('api/login', { username: $('#lu').value, password: $('#lp').value, remember: $('#lr').checked });
   const j = await r.json();
   $('#lp').value = '';
-  $('#loginMsg').innerHTML = j.ok ? '' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
-  if (j.ok) refreshSession();
+  $('#loginMsg').innerHTML = j.ok ? '<span style="color:var(--ok)">Prisijungta.</span>' : `<span style="color:var(--bad)">${esc(j.error)}</span>`;
+  if (j.ok) loadStatus();
+};
+
+// ---------- analyze ----------
+$('#useAi').onchange = renderStatus;
+$('#clearAll').onclick = () => {
+  $('#files').value = '';
+  $('#cases').innerHTML = '';
+  $('#progress').textContent = '';
+  BATCH = null;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 $('#analyze').onclick = async () => {
   const files = $('#files').files;
-  if (!files.length) return;
+  if (!files.length) { $('#progress').innerHTML = '<span style="color:var(--bad)">Pasirinkite nuotraukas.</span>'; return; }
+  const useAi = STATUS.ai.ready && $('#useAi').checked;
   const fd = new FormData();
-  fd.append('ai', CFG.secrets.anthropic && $('#useAi').checked ? '1' : '0');
+  fd.append('ai', useAi ? '1' : '0');
   for (const f of files) fd.append('photos', f, f.name);
   $('#analyze').disabled = true;
-  $('#progress').textContent = `Apdorojama ${files.length} nuotr.: EXIF, adresas, Claude analizė… (gali užtrukti minutę)`;
+  $('#progress').textContent = `Apdorojama ${files.length} nuotr.: EXIF, adresas${useAi ? `, ${aiLabel()} analizė… (gali užtrukti minutę)` : '…'}`;
   $('#cases').innerHTML = '';
   try {
     const r = await fetch('api/analyze', { method: 'POST', body: fd });
@@ -260,7 +396,6 @@ $('#analyze').onclick = async () => {
 function renderCase(c) {
   const el = document.createElement('div');
   el.className = 'card';
-  el.dataset.lat = c.lat ?? ''; el.dataset.lon = c.lon ?? '';
   const [d, t] = (c.time || '').split(' ');
   el.innerHTML = `
     <div class="row" style="justify-content:space-between"><strong>Atvejis ${c.id + 1}${c.vehicle ? ' – ' + esc(c.vehicle) : ''}</strong>
@@ -269,8 +404,8 @@ function renderCase(c) {
     ${c.aiError ? `<div class="note bad">${esc(c.aiError)}</div>` : ''}
     ${c.manual ? `<div class="note warn">Rankinis režimas: įveskite numerį ir pažymėkite pažeidimus, tada „Perrašyti pagal laukus“.</div>` : ''}
     ${c.noExif ? `<div class="note warn">Nuotraukose nėra EXIF laiko ir vietos – įveskite ranka.</div>` : ''}
-    ${c.doubts ? `<div class="note warn">Claude abejonės: ${esc(c.doubts)}</div>` : ''}
-    ${!c.plateCertain && c.plate ? `<div class="note warn">Numerį patikrinkite – Claude nėra tikras.</div>` : ''}
+    ${c.doubts ? `<div class="note warn">AI abejonės: ${esc(c.doubts)}</div>` : ''}
+    ${!c.plateCertain && c.plate ? `<div class="note warn">Numerį patikrinkite – AI nėra tikras.</div>` : ''}
     <div class="age"></div>
     <div class="two">
       <div><label class="f">Pažeidimo data</label><input type="date" class="date" value="${esc(d || '')}"></div>
@@ -284,36 +419,63 @@ function renderCase(c) {
     <div class="row" style="justify-content:space-between;margin-top:10px"><label class="f" style="margin:0">Aprašymas</label><button class="regen">Perrašyti pagal laukus</button></div>
     <textarea class="desc" maxlength="1000">${esc(c.description)}</textarea>
     <div class="muted count"></div>
+    <div class="checks"></div>
     <div class="row" style="margin-top:12px"><button class="primary submit">Pateikti į tvarkaumiesta.lt</button></div>
     <div class="result"></div>`;
   $('#cases').appendChild(el);
 
   const time = () => `${$('.date', el).value} ${$('.time', el).value}`;
+  const plateVal = () => $('.plate', el).value.toUpperCase().replace(/\s+/g, '');
+  const selected = () => [...el.querySelectorAll('.ph:checked')].map(x => +x.value);
+  const viols = () => [...el.querySelectorAll('.v:checked')].map(x => x.value);
   const updAge = () => {
     const a = ageDays(time());
     const box = $('.age', el);
     if (a != null && a > CFG.maxAgeDays) {
       box.innerHTML = `<div class="note bad"><strong>Šio pranešimo VMSA nenagrinės.</strong> Pažeidimas užfiksuotas prieš ${a} d., o pagal naują savivaldybės reglamentą pranešimas turi būti pateiktas per ${CFG.maxAgeDays} d.
         <label style="display:flex;gap:6px;margin-top:6px"><input type="checkbox" class="ack"> Suprantu ir vis tiek teikiu</label></div>`;
-    } else if (a != null) {
+    } else if (a != null && !isNaN(a)) {
       box.innerHTML = `<div class="muted">Pažeidimui ${a} d. – iki ${CFG.maxAgeDays} d. ribos liko ${CFG.maxAgeDays - a} d.</div>`;
     } else box.innerHTML = '';
   };
   const updCount = () => { $('.count', el).textContent = `Liko simbolių: ${1000 - $('.desc', el).value.length}`; };
-  const selected = () => [...el.querySelectorAll('.ph:checked')].map(x => +x.value);
-  const viols = () => [...el.querySelectorAll('.v:checked')].map(x => x.value);
-  const regen = async () => {
-    const r = await fetch('api/describe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ time: time(), address: $('.addr', el).value, plate: $('.plate', el).value.toUpperCase().replace(/\s+/g, ''), violations: viols(), extra: $('.extra', el).value, photoCount: selected().length }) });
-    $('.desc', el).value = (await r.json()).description; updCount();
+
+  // Required fields are outlined in red and listed above the button; submit stays
+  // disabled until they are filled. Settings problems are shown but don't block.
+  el.validate = () => {
+    const need = [];
+    const mark = (sel, bad, text) => { $(sel, el).classList.toggle('missing', bad); if (bad) need.push(text); };
+    mark('.date', !$('.date', el).value, 'data');
+    mark('.time', !$('.time', el).value, 'laikas');
+    mark('.addr', !$('.addr', el).value.trim(), 'adresas');
+    mark('.plate', !/^[A-Z0-9]{2,8}$/.test(plateVal()), 'valstybinis numeris');
+    mark('.desc', !$('.desc', el).value.trim(), 'aprašymas');
+    if (!selected().length) need.push('bent viena nuotrauka');
+    const noViol = !viols().length;
+    $('.viol', el).classList.toggle('missing', noViol);
+    const soft = [];
+    if (noViol) soft.push('nepažymėtas nė vienas pažeidimas');
+    if (STATUS && !STATUS.session.loggedIn && !STATUS.session.credsSaved) soft.push('<a href="#nustatymai/vilnius">neprisijungta prie Vilnius Login</a>');
+    if (STATUS?.applicant.missing.length) soft.push(`<a href="#nustatymai/applicant">trūksta pareiškėjo duomenų: ${esc(STATUS.applicant.missing.join(', '))}</a>`);
+    $('.checks', el).innerHTML = (need.length ? `<div class="note bad">Užpildykite: ${need.join(', ')}</div>` : '')
+      + (soft.length ? `<div class="note warn">Atkreipkite dėmesį: ${soft.join('; ')}</div>` : '');
+    const btn = $('.submit', el);
+    if (btn.textContent !== 'Pateikta') btn.disabled = need.length > 0;
   };
-  $('.date', el).onchange = $('.time', el).onchange = updAge;
-  $('.desc', el).oninput = updCount;
+
+  const regen = async () => {
+    const r = await postJson('api/describe', { time: time(), address: $('.addr', el).value, plate: plateVal(), violations: viols(), extra: $('.extra', el).value, photoCount: selected().length });
+    $('.desc', el).value = (await r.json()).description; updCount(); el.validate();
+  };
+  $('.date', el).onchange = $('.time', el).onchange = () => { updAge(); el.validate(); };
+  $('.desc', el).oninput = () => { updCount(); el.validate(); };
+  el.addEventListener('input', ev => { if (!ev.target.matches('.desc')) el.validate(); });
+  el.addEventListener('change', () => el.validate());
   $('.regen', el).onclick = regen;
-  updAge(); updCount();
+  updAge(); updCount(); el.validate();
 
   $('.submit', el).onclick = async () => {
-    const plate = $('.plate', el).value.toUpperCase().replace(/\s+/g, '');
+    const plate = plateVal();
     const ack = $('.ack', el)?.checked || false;
     const a = ageDays(time());
     if (a > CFG.maxAgeDays && !ack) { alert(`Pažeidimas senesnis nei ${CFG.maxAgeDays} d. – VMSA jo nenagrinės. Pažymėkite „Suprantu ir vis tiek teikiu“, jei teikiate.`); return; }
@@ -321,11 +483,11 @@ function renderCase(c) {
     if (!confirm(msg)) return;
     const btn = $('.submit', el); btn.disabled = true; btn.textContent = 'Teikiama…';
     try {
-      const r = await fetch('api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      const r = await postJson('api/submit', {
         batchId: BATCH, caseId: c.id, time: time(), address: $('.addr', el).value, lat: c.lat, lon: c.lon, plate,
-        description: $('.desc', el).value, photoIdx: selected(), violations: viols(), ackOld: ack }) });
+        description: $('.desc', el).value, photoIdx: selected(), violations: viols(), ackOld: ack });
       const j = await r.json();
-      if (j.needsLogin) { refreshSession(); $('#loginCard').scrollIntoView({ behavior: 'smooth' }); }
+      if (j.needsLogin) { await loadStatus(); openSettings('vilnius'); }
       if (!r.ok) throw new Error(j.error);
       $('.result', el).innerHTML = `<div class="note ok">Užregistruota${j.id ? `: <a href="${esc(j.url)}" target="_blank" rel="noopener">pranešimas ${esc(j.id)}</a>` : ''}. Išsaugota: ${esc(j.folder)}</div>`;
       btn.textContent = 'Pateikta';
@@ -343,6 +505,14 @@ async function loadJournal() {
     `<tr><td>${esc(r.data_laikas)}</td><td>${esc(r.adresas)}</td><td>${esc(r.nr)}</td><td>${esc(r.ket)}</td><td>${r.pranesimo_nr ? `<a href="https://tvarkaumiesta.lt/pranesimai/${esc(r.pranesimo_nr)}" target="_blank" rel="noopener">${esc(r.pranesimo_nr)}</a>` : '—'}</td></tr>`).join('')}</table>` : 'Dar nėra.';
 }
 $('#reloadJournal').onclick = loadJournal;
+
+async function init() {
+  CFG = await (await fetch('api/config')).json();
+  if (location.hash.startsWith('#import=')) { await importFromHash(); location.hash = '#nustatymai/vilnius'; }
+  await loadStatus();
+  route();
+  loadJournal();
+}
 init();
 </script>
 </body>

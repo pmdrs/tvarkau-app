@@ -3,14 +3,15 @@ import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzeIncident, verifyKey } from './ai.mjs';
+import { activeProvider, aiReady, aiStatus, analyzeIncident, checkKeyFormat, PROVIDERS, providerConfig, verifyProvider } from './ai.mjs';
 import { reverseGeocode } from './geo.mjs';
 import { groupIncidents, processPhoto, summarize } from './photos.mjs';
 import { log } from './log.mjs';
-import { deleteAppAnthropicKey, saveAppAnthropicKey, secretStatus } from './secrets.mjs';
+import { deleteAppKey, saveAppKey, vilniusCredsSaved } from './secrets.mjs';
+import { APPLICANT_FIELDS, loadAppApplicant, loadSettings, saveAppApplicant, saveSettings } from './settings.mjs';
 import { archiveCase, ensureDirs, journalAdd, journalRows } from './store.mjs';
 import { buildDescription, VIOLATIONS } from './violations.mjs';
-import { applicantFrom, getUser, importSession, loginWith, logout, sessionInfo, submitReport } from './vilnius.mjs';
+import { applicantFrom, currentUser, getUser, importSession, loginWith, logout, sessionInfo, submitReport } from './vilnius.mjs';
 
 // Municipal rule: reports about violations older than 30 days are not handled by VMSA.
 const MAX_AGE_DAYS = 30;
@@ -28,7 +29,68 @@ app.use(express.static(join(here, '..', 'public')));
 const ageDays = time => (time ? (Date.now() - new Date(time.replace(' ', 'T'))) / 864e5 : null);
 
 app.get('/api/config', (_req, res) => {
-  res.json({ maxAgeDays: MAX_AGE_DAYS, violations: VIOLATIONS, secrets: secretStatus() });
+  res.json({ maxAgeDays: MAX_AGE_DAYS, violations: VIOLATIONS, applicantFields: APPLICANT_FIELDS });
+});
+
+// Everything the header chips and the "missing settings" bar need. Never triggers a login.
+app.get('/api/status', async (_req, res) => {
+  const user = await currentUser();
+  const session = await sessionInfo();
+  const applicant = applicantFrom(user);
+  const appValues = loadAppApplicant();
+  const applicantMissing = Object.entries(APPLICANT_FIELDS).filter(([k]) => !applicant[`reporter_${k}`]).map(([, label]) => label);
+  const ai = aiStatus();
+  const missing = [];
+  if (!session.loggedIn && !vilniusCredsSaved()) missing.push({ area: 'vilnius', text: 'Neprisijungta prie Vilnius Login – pateikti pranešimų nepavyks' });
+  if (applicantMissing.length) missing.push({ area: 'applicant', text: `Pareiškėjo duomenys: ${applicantMissing.join(', ')}${user ? '' : ' (dalį gali užpildyti Vilnius Login profilis prisijungus)'}` });
+  if (ai.provider !== 'none' && ai.missing.length) missing.push({ area: 'ai', text: `AI atpažinimas (${ai.providers[ai.provider].label}): trūksta ${ai.missing.join(', ')}` });
+  res.json({
+    session: { ...session, credsSaved: vilniusCredsSaved() },
+    applicant: { values: Object.fromEntries(Object.keys(APPLICANT_FIELDS).map(k => [k, applicant[`reporter_${k}`]])), app: appValues, missing: applicantMissing, fromProfile: !!user },
+    ai,
+    missing,
+  });
+});
+
+app.post('/api/settings/applicant', (req, res) => {
+  saveAppApplicant(req.body || {});
+  log.info('config', 'applicant details saved in /data');
+  res.json({ ok: true });
+});
+
+// Provider choice + optional new key. A new key or model is verified before saving.
+app.post('/api/settings/ai', async (req, res) => {
+  const { provider, model, baseUrl } = req.body || {};
+  const key = String(req.body?.key || '').trim();
+  if (provider === 'none') { saveSettings({ provider: 'none' }); log.info('config', 'ai provider: none'); return res.json({ ok: true, ai: aiStatus() }); }
+  const p = PROVIDERS[provider];
+  if (!p) return res.status(400).json({ error: 'Nežinomas tiekėjas' });
+  const formatProblem = checkKeyFormat(provider, key);
+  if (formatProblem) return res.status(400).json({ error: formatProblem });
+  const cur = providerConfig(provider);
+  const next = {
+    key: key || cur.key,
+    model: String(model || '').trim() || cur.model,
+    baseUrl: provider === 'custom' ? String(baseUrl || '').trim().replace(/\/+$/, '') : cur.baseUrl,
+  };
+  if (!next.key && !p.keyOptional) return res.status(400).json({ error: `Įveskite ${p.label} raktą (${p.keyHelp}).` });
+  if (p.needsBaseUrl && !/^https?:\/\/\S+$/.test(next.baseUrl)) return res.status(400).json({ error: 'Įveskite adresą, pvz. http://localhost:11434/v1' });
+  if (!next.model) return res.status(400).json({ error: 'Įveskite modelio pavadinimą' });
+  const problem = await verifyProvider(provider, next);
+  if (problem) { log.warn('config', 'ai settings rejected', { provider, reason: problem }); return res.status(400).json({ error: problem }); }
+  if (key) saveAppKey(p.secret, key);
+  const models = { ...loadSettings().models, [provider]: next.model };
+  saveSettings({ provider, models, ...(provider === 'custom' ? { baseUrl: next.baseUrl } : {}) });
+  log.info('config', 'ai provider saved', { provider, model: next.model, keySaved: !!key });
+  res.json({ ok: true, ai: aiStatus() });
+});
+
+app.delete('/api/settings/ai-key/:provider', (req, res) => {
+  const p = PROVIDERS[req.params.provider];
+  if (!p) return res.status(400).json({ error: 'Nežinomas tiekėjas' });
+  deleteAppKey(p.secret);
+  log.info('config', 'ai key removed from /data', { provider: req.params.provider });
+  res.json({ ok: true, ai: aiStatus() });
 });
 
 app.post('/api/analyze', upload.array('photos', 30), async (req, res) => {
@@ -41,8 +103,8 @@ app.post('/api/analyze', upload.array('photos', 30), async (req, res) => {
     for (const group of groupIncidents(photos)) {
       const { time, lat, lon } = summarize(group);
       const address = await reverseGeocode(lat, lon);
-      // Manual mode: no API key, or the user unticked "Atpažinti su Claude".
-      const useAi = req.body?.ai !== '0' && secretStatus().anthropic;
+      // Manual mode: no AI configured, or the user unticked "Atpažinti".
+      const useAi = req.body?.ai !== '0' && aiReady();
       const ai = useAi ? await analyzeIncident(group.map(p => p.jpeg), { time, address }) : { manual: true };
       const violations = ai.violations || [];
       const plate = (ai.plate || '').toUpperCase().replace(/\s+/g, '');
@@ -71,23 +133,6 @@ app.get('/api/photo/:batch/:idx', (req, res) => {
   const p = batches.get(req.params.batch)?.photos[+req.params.idx];
   if (!p) return res.sendStatus(404);
   res.type('jpeg').send(p.jpeg);
-});
-
-// Anthropic key entered in the app (stored in /data, never echoed back).
-app.post('/api/anthropic-key', async (req, res) => {
-  const key = String(req.body?.key || '').trim();
-  if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return res.status(400).json({ error: 'Tai nepanašu į Anthropic API raktą (turi prasidėti sk-ant-).' });
-  const problem = await verifyKey(key);
-  if (problem) { log.warn('config', 'anthropic key rejected', { reason: problem }); return res.status(400).json({ error: problem }); }
-  saveAppAnthropicKey(key);
-  log.info('config', 'anthropic key saved in /data', { hint: '…' + key.slice(-4) });
-  res.json({ ok: true, secrets: secretStatus() });
-});
-
-app.delete('/api/anthropic-key', (_req, res) => {
-  deleteAppAnthropicKey();
-  log.info('config', 'anthropic key removed from /data');
-  res.json({ ok: true, secrets: secretStatus() });
 });
 
 app.post('/api/describe', (req, res) => res.json({ description: buildDescription(req.body || {}) }));
@@ -162,4 +207,4 @@ app.post('/api/submit', async (req, res) => {
 app.get('/api/journal', (_req, res) => res.json(journalRows()));
 
 const port = +(process.env.PORT || 3000);
-app.listen(port, () => log.info('server', `listening on :${port}`, secretStatus()));
+app.listen(port, () => log.info('server', `listening on :${port}`, { ai: activeProvider(), aiReady: aiReady(), vilniusCreds: vilniusCredsSaved() }));

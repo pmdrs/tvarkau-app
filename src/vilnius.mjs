@@ -7,6 +7,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log, maskUser, shortUrl } from './log.mjs';
 import { secrets } from './secrets.mjs';
+import { loadAppApplicant } from './settings.mjs';
 
 const API = 'https://api-tvarkau.vilnius.lt/api/v2/';
 const SITE = 'https://tvarkaumiesta.lt';
@@ -236,22 +237,31 @@ export async function getUser() {
   return login(secrets.vilniusUser(), secrets.vilniusPassword());
 }
 
-// Non-throwing status for the UI; never triggers a login.
-export async function sessionInfo() {
+// Valid session user (memory or /data/session.json) or null; never triggers a login.
+export async function currentUser() {
   for (const user of [memorySession, (() => { try { return JSON.parse(readFileSync(sessionFile(), 'utf8')); } catch { return null; } })()]) {
-    if (user && (await tokenValid(user))) return { loggedIn: true, name: user.name || null, remembered: user === memorySession ? existsSync(sessionFile()) : true };
+    if (user && (await tokenValid(user))) return user;
   }
-  return { loggedIn: false };
+  return null;
 }
 
-// What the profile gives for the applicant step; applicant.json fills any gaps.
+// Non-throwing status for the UI; never triggers a login.
+export async function sessionInfo() {
+  const user = await currentUser();
+  if (!user) return { loggedIn: false };
+  return { loggedIn: true, name: user.name || null, remembered: user === memorySession ? existsSync(sessionFile()) : true };
+}
+
+// Applicant step: values typed in the app → Vilnius Login profile → applicant.json secret.
 export function applicantFrom(user) {
+  const app = loadAppApplicant();
   const fb = secrets.applicant();
+  const pick = (key, profile) => app[key] || profile || fb[key] || '';
   return {
-    reporter_name: user.name || fb.name || '',
-    reporter_email: user.email || fb.email || '',
-    reporter_address: user.address || fb.address || '',
-    reporter_phone: user.phone_number || fb.phone || '',
+    reporter_name: pick('name', user?.name),
+    reporter_email: pick('email', user?.email),
+    reporter_address: pick('address', user?.address),
+    reporter_phone: pick('phone', user?.phone_number),
   };
 }
 

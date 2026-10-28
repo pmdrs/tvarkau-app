@@ -3,7 +3,14 @@
 Savarankiškai talpinama web programa, kuri iš nuotraukų paruošia ir pateikia [tvarkaumiesta.lt](https://tvarkaumiesta.lt) (Vilnius) pranešimą apie transporto priemonės stovėjimo pažeidimą.
 
 - Įkeliate nuotraukas (iPhone HEIC ar JPG). Programa iš EXIF paima laiką ir GPS, nustato adresą (OpenStreetMap Nominatim) ir sugrupuoja nuotraukas į atvejus.
-- Pasirinktinai [Claude](https://www.anthropic.com/claude) atpažįsta valstybinį numerį ir pažeidimą (KET 150.4 / 150.5 / 150.6 / 150.10 / 150.16). Be API rakto veikia rankinis režimas.
+- Pasirinktinai AI atpažįsta valstybinį numerį ir pažeidimą (KET 150.4 / 150.5 / 150.6 / 150.10 / 150.16). Tiekėjas renkamas programos nustatymuose (⚙️):
+  - **Claude API** – Anthropic API raktas;
+  - **Claude Code (headless)** – konteineryje paleidžiamas `claude -p`; su `claude setup-token` tokenu naudojamas Claude Pro/Max prenumeratos limitas;
+  - **OpenAI**, **Google Gemini**;
+  - **OpenAI-suderinamas** API (Ollama, LM Studio, OpenRouter…) – nurodomas adresas ir modelis.
+
+  Be AI veikia rankinis režimas. Raktas ir modelis patikrinami prieš išsaugant.
+- Nustatymai (Vilnius Login, pareiškėjo duomenys, AI) yra atskirame lange. Jei kažko trūksta, programa tai rodo viršuje, o kiekviename atvejyje pažymi neužpildytus laukus.
 - Jei pažeidimas senesnis nei 30 dienų, programa įspėja, kad VMSA tokio pranešimo nenagrinės, ir reikalauja patvirtinimo.
 - Pranešimas pateikiamas tuo pačiu API, kurį naudoja tvarkaumiesta.lt svetainė, prisijungus per Vilnius Login.
 - Pateikti pranešimai išsaugomi `/data`: žurnalas `zurnalas.csv` ir kiekvieno atvejo aplankas su nuotraukomis.
@@ -25,17 +32,12 @@ Portainer šablonas: [`deploy/portainer-stack.example.yaml`](deploy/portainer-st
 | Secret | Paskirtis | Jei tuščias |
 |---|---|---|
 | `vilnius_username`, `vilnius_password` | automatinis prisijungimas | prisijungiate pačioje programoje |
-| `anthropic_api_key` | numerio ir pažeidimo atpažinimas | raktą galima įvesti programoje (saugomas `/data/anthropic_api_key`, 600), kitaip – rankinis režimas |
-| `applicant.json` | pareiškėjo duomenys, jei jų trūksta Vilnius Login profilyje | naudojamas tik profilis |
+| `anthropic_api_key` | Claude API | raktą galima įvesti programoje |
+| `applicant.json` | pareiškėjo duomenys, jei jų trūksta Vilnius Login profilyje | naudojamas profilis ir programoje įvesti duomenys |
 
-## Prisijungimas
+Kitų AI tiekėjų raktai (`claude_code_oauth_token`, `openai_api_key`, `gemini_api_key`, `custom_api_key`) įvedami programoje ir saugomi `/data/keys/` (600 teisės). Juos galima pateikti ir kaip Docker secrets tais pačiais vardais – tada secret turi pirmenybę. Programoje įvesti pareiškėjo duomenys saugomi `/data/applicant.json` ir turi pirmenybę prieš profilį ir secret.
 
-- **El. paštas ir slaptažodis (Vilnius Login)** – veikia ir iš telefono. Slaptažodis naudojamas tik prisijungimui ir niekur neišsaugomas.
-- **Žymė „→ Parking“** – prisijungiate tvarkaumiesta.lt savo naršyklėje (taip pat per e. valdžios vartus) ir perduodate sesiją programai.
-- **„Likti prisijungus“** – pažymėjus sesijos raktas saugomas `/data/session.json` (600), o Vilnius Login „likti prisijungus“ atsakoma „taip“. Nepažymėjus sesija laikoma tik atmintyje; pasibaigus – naudojami Docker secrets prisijungimo duomenys (jei nustatyti).
-- **Atsijungti** – ištrina sesiją iš serverio.
-
-Visi prisijungimo žingsniai rašomi į `docker logs` tik kaip host + kelias, be parametrų, slapukų reikšmių, slaptažodžių ar raktų.
+Programoje įvestas slaptažodis naudojamas tik prisijungimui ir niekur neišsaugomas. Pažymėjus „Prisiminti sesiją“, `/data/session.json` išsaugomas tik sesijos raktas.
 
 ## Saugumas
 
