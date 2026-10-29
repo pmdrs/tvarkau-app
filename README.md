@@ -15,6 +15,17 @@ Savarankiškai talpinama web programa, kuri iš nuotraukų paruošia ir pateikia
 - Pranešimas pateikiamas tuo pačiu API, kurį naudoja tvarkaumiesta.lt svetainė, prisijungus per Vilnius Login.
 - Pateikti pranešimai išsaugomi `/data`: žurnalas `zurnalas.csv` ir kiekvieno atvejo aplankas su nuotraukomis.
 
+## Ekrano nuotraukos
+
+> Nuotraukose – demonstraciniai duomenys: išgalvotas vartotojas, valstybiniai numeriai ir piešti „nuotraukų“ paveikslėliai.
+
+| | |
+|---|---|
+| ![Pradžia](docs/screenshots/01-pradzia.jpg)<br>**Pradžia** – būsena (Vilnius Login, AI, pareiškėjas), nuotraukų įkėlimas ir pateiktų pranešimų žurnalas. | ![Analizė](docs/screenshots/02-analize.jpg)<br>**Analizė vyksta** – kiekvienas etapas su eigos juosta; atvejis rodomas kaip skeleton, kol nustatomas adresas ir AI skaito numerį. |
+| ![Atvejis](docs/screenshots/03-atvejis.jpg)<br>**Paruoštas atvejis** – AI užpildė numerį, pažeidimus ir aprašymą; viską galima pataisyti. | ![30 dienų riba](docs/screenshots/04-30-dienu-riba.jpg)<br>**30 dienų riba** – senesniam pažeidimui įspėjama, kad VMSA jo nenagrinės; pateikti galima tik patvirtinus. |
+| ![Patvirtinimas](docs/screenshots/05-patvirtinimas.jpg)<br>**Patvirtinimas** prieš pateikiant. | ![Pateikta](docs/screenshots/06-pateikta.jpg)<br>**Pateikimo etapai** ir tvarkaumiesta.lt pranešimo numeris. |
+| ![AI nustatymai](docs/screenshots/07-ai-nustatymai.jpg)<br>**AI tiekėjas** – Claude API, Claude Code, OpenAI, Gemini, OpenAI-suderinamas arba rankinis režimas. | |
+
 ## Paleidimas
 
 ```bash
