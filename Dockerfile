@@ -1,4 +1,13 @@
-FROM node:22.11.0-bookworm-slim
+# --- frontend: React + Vite + Tailwind + shadcn/ui → /web/../public ---
+FROM node:22.20.0-bookworm-slim AS web
+WORKDIR /build/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# --- runtime ---
+FROM node:22.20.0-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -13,7 +22,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 RUN npm install -g @anthropic-ai/claude-code@2.1.310 && npm cache clean --force
 
 COPY src ./src
-COPY public ./public
+COPY --from=web /build/public ./public
 
 # No secrets are baked in: credentials come from /run/secrets at runtime (see compose.yaml).
 RUN mkdir -p /data && chown node:node /data

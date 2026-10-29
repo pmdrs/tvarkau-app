@@ -265,8 +265,11 @@ export function applicantFrom(user) {
   };
 }
 
-export async function submitReport({ time, address, lat, lon, plate, description, jpegs }) {
+// onStage(name) reports progress to the UI: session → upload → id.
+export async function submitReport({ time, address, lat, lon, plate, description, jpegs }, onStage = () => {}) {
+  onStage('session');
   const user = await getUser();
+  onStage('upload');
   const body = {
     type: PARKING_TYPE,
     city_id: CITY_VILNIUS,
@@ -290,6 +293,7 @@ export async function submitReport({ time, address, lat, lon, plate, description
   const txt = await r.text();
   if (!r.ok) throw new Error(`tvarkaumiesta.lt atmetė pranešimą (HTTP ${r.status}): ${txt.slice(0, 300)}`);
   const data = (() => { try { return JSON.parse(txt)?.data; } catch { return null; } })();
+  onStage('id');
   return { id: data?.id ?? (await latestReportId(user)), message: data?.successMessage || null };
 }
 

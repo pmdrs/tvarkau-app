@@ -4,3 +4,5 @@ node_modules/
 .env*
 compose.override.yaml
 deploy/*.galaxy.yaml
+public/
+web/node_modules/

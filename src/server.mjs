@@ -93,23 +93,40 @@ app.delete('/api/settings/ai-key/:provider', (req, res) => {
   res.json({ ok: true, ai: aiStatus() });
 });
 
+// Streams NDJSON events so the UI can show each stage:
+//   batch → photo×N → groups → (case-stage geocode/ai → case)×K → done | error
 app.post('/api/analyze', upload.array('photos', 30), async (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ error: 'Nėra nuotraukų' });
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
+  const send = ev => res.write(JSON.stringify(ev) + '\n');
+  const t0 = Date.now();
   try {
-    if (!req.files?.length) return res.status(400).json({ error: 'Nėra nuotraukų' });
-    const photos = [];
-    for (const f of req.files) photos.push(await processPhoto(Buffer.from(f.originalname, 'latin1').toString('utf8'), f.buffer));
     const batchId = randomUUID();
-    const cases = [];
-    for (const group of groupIncidents(photos)) {
+    const photos = [];
+    const batch = { created: Date.now(), photos, cases: [] };
+    batches.set(batchId, batch);
+    for (const [id, b] of batches) if (Date.now() - b.created > 864e5) batches.delete(id);
+    const total = req.files.length;
+    send({ type: 'batch', batchId, total });
+    for (const [i, f] of req.files.entries()) {
+      const p = await processPhoto(Buffer.from(f.originalname, 'latin1').toString('utf8'), f.buffer);
+      photos.push(p);
+      send({ type: 'photo', idx: i, done: i + 1, total, exif: !!p.exif.time, gps: p.exif.lat != null });
+    }
+    const groups = groupIncidents(photos);
+    send({ type: 'groups', count: groups.length, photoIdx: groups.map(g => g.map(p => photos.indexOf(p))) });
+    // Manual mode: no AI configured, or the user unticked "Atpažinti".
+    const useAi = req.body?.ai !== '0' && aiReady();
+    for (const [k, group] of groups.entries()) {
       const { time, lat, lon } = summarize(group);
+      send({ type: 'case-stage', id: k, stage: 'geocode' });
       const address = await reverseGeocode(lat, lon);
-      // Manual mode: no AI configured, or the user unticked "Atpažinti".
-      const useAi = req.body?.ai !== '0' && aiReady();
+      if (useAi) send({ type: 'case-stage', id: k, stage: 'ai' });
       const ai = useAi ? await analyzeIncident(group.map(p => p.jpeg), { time, address }) : { manual: true };
       const violations = ai.violations || [];
       const plate = (ai.plate || '').toUpperCase().replace(/\s+/g, '');
-      cases.push({
-        id: cases.length,
+      const c = {
+        id: k,
         photoIdx: group.map(p => photos.indexOf(p)),
         time, lat, lon, address, plate,
         plateCertain: !!ai.plate_certain,
@@ -117,16 +134,17 @@ app.post('/api/analyze', upload.array('photos', 30), async (req, res) => {
         violations, extra: ai.extra || '', doubts: ai.doubts || '', aiError: ai.error || null, manual: !!ai.manual,
         noExif: !time,
         description: buildDescription({ time, address, plate, violations, extra: ai.extra, photoCount: group.length }),
-      });
+      };
+      batch.cases.push(c);
+      send({ type: 'case', case: c });
     }
-    batches.set(batchId, { created: Date.now(), photos, cases });
-    log.info('analyze', `${photos.length} photos → ${cases.length} cases`, { ai: cases.some(c => !c.manual), noExif: cases.filter(c => c.noExif).length, aiErrors: cases.filter(c => c.aiError).length });
-    for (const [id, b] of batches) if (Date.now() - b.created > 864e5) batches.delete(id);
-    res.json({ batchId, cases, maxAgeDays: MAX_AGE_DAYS });
+    log.info('analyze', `${photos.length} photos → ${batch.cases.length} cases`, { ai: useAi, noExif: batch.cases.filter(c => c.noExif).length, aiErrors: batch.cases.filter(c => c.aiError).length, ms: Date.now() - t0 });
+    send({ type: 'done', count: batch.cases.length, maxAgeDays: MAX_AGE_DAYS });
   } catch (e) {
     log.error('analyze', e.message, { stack: e.stack?.split('\n')[1]?.trim() });
-    res.status(500).json({ error: `Nuotraukų apdorojimas nepavyko: ${e.message}` });
+    send({ type: 'error', error: `Nuotraukų apdorojimas nepavyko: ${e.message}` });
   }
+  res.end();
 });
 
 app.get('/api/photo/:batch/:idx', (req, res) => {
@@ -188,20 +206,25 @@ app.post('/api/submit', async (req, res) => {
   }
   const photos = (photoIdx || []).map(i => batch.photos[i]).filter(Boolean);
   if (!photos.length) return res.status(400).json({ error: 'Nepasirinkta nė viena nuotrauka' });
+  // Stages: session → upload → id → archive → done | error
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
+  const send = ev => res.write(JSON.stringify(ev) + '\n');
   try {
-    const result = await submitReport({ time, address: address.trim(), lat, lon, plate: p, description: description.trim(), jpegs: photos.map(x => x.jpeg) });
+    const result = await submitReport({ time, address: address.trim(), lat, lon, plate: p, description: description.trim(), jpegs: photos.map(x => x.jpeg) },
+      stage => send({ type: 'stage', stage, photos: photos.length }));
     log.info('submit', 'registered', { id: result.id, plate: p, kets: violations.join('+') });
+    send({ type: 'stage', stage: 'archive' });
     const kets = [...new Set(violations.map(v => VIOLATIONS[v]?.ket).filter(Boolean))];
     const folder = archiveCase({ time, plate: p, photos, report: { time, address, lat, lon, plate: p, description, kets, ...result, submittedAt: new Date().toISOString() } });
     journalAdd({ time, address, plate: p, kets, id: result.id, folder });
     const c = batch.cases.find(x => x.id === caseId);
     if (c) c.submitted = result.id;
-    res.json({ ...result, url: result.id ? `https://tvarkaumiesta.lt/pranesimai/${result.id}` : null, folder });
+    send({ type: 'done', ...result, url: result.id ? `https://tvarkaumiesta.lt/pranesimai/${result.id}` : null, folder });
   } catch (e) {
-    if (e.code === 'NEEDS_LOGIN') return res.status(401).json({ needsLogin: true, error: 'Prisijunkite per Vilnius Login ir pateikite dar kartą.' });
-    log.error('submit', e.message);
-    res.status(502).json({ error: e.message });
+    if (e.code === 'NEEDS_LOGIN') send({ type: 'error', needsLogin: true, error: 'Prisijunkite per Vilnius Login ir pateikite dar kartą.' });
+    else { log.error('submit', e.message); send({ type: 'error', error: e.message }); }
   }
+  res.end();
 });
 
 app.get('/api/journal', (_req, res) => res.json(journalRows()));
